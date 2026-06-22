@@ -21,21 +21,21 @@ import PDFCompileOverlay from './PDFCompileOverlay';
 
 // ─── Palet ───────────────────────────────────────────────────────────────────
 const C = {
-  bg:          '#222831',
-  surface:     '#393E46',
-  cyan:        '#00ADB5',
-  cyanDim:     'rgba(0,173,181,0.12)',
-  cyanBorder:  'rgba(0,173,181,0.3)',
-  text:        '#EEEEEE',
-  muted:       '#9EA8B3',
-  border:      'rgba(238,238,238,0.1)',
-  danger:      '#E05C5C',
-  dangerDim:   'rgba(224,92,92,0.12)',
-  dangerBorder:'rgba(224,92,92,0.3)',
-  success:     '#4ECDC4',
-  warn:        '#F5A623',
-  warnDim:     'rgba(245,166,35,0.12)',
-  warnBorder:  'rgba(245,166,35,0.3)',
+  bg:          'var(--bg-main)',
+  surface:     'var(--bg-card)',
+  cyan:        'var(--accent-primary)',
+  cyanDim:     'var(--primary-glow)',
+  cyanBorder:  'var(--border-color)',
+  text:        'var(--text-main)',
+  muted:       'var(--text-muted)',
+  border:      'var(--border-color)',
+  danger:      'var(--danger)',
+  dangerDim:   'var(--danger-glow)',
+  dangerBorder:'var(--border-color)',
+  success:     'var(--success)',
+  warn:        'var(--warning)',
+  warnDim:     'var(--warning-glow)',
+  warnBorder:  'var(--border-color)',
 };
 
 // ─── Inline Custom Brand Icons ───────────────────────────────────────────────
@@ -47,7 +47,7 @@ const InstagramIcon = ({ size = 22, color = '#E1306C' }) => (
   </svg>
 );
 
-const TiktokIcon = ({ size = 22, color = '#00ADB5' }) => (
+const TiktokIcon = ({ size = 22, color = 'var(--accent-primary)' }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
   </svg>
@@ -94,13 +94,13 @@ const Badge = ({ label, color=C.cyan, bg=C.cyanDim, border }) => (
   <span style={{
     display:'inline-block', padding:'3px 10px', borderRadius:'20px',
     fontSize:'0.72rem', fontWeight:700, color, background:bg,
-    border:`1px solid ${border || color+'44'}`,
+    border:`1px solid ${border || 'var(--border-color)'}`,
   }}>{label}</span>
 );
 
 const Btn = ({ children, onClick, variant='primary', disabled=false, style={}, type='button' }) => {
   const v = {
-    primary:   { background: C.cyan, color: C.bg, border:'none' },
+    primary:   { background: C.cyan, color: '#222831', border:'none' },
     secondary: { background:'transparent', color: C.text, border:`1px solid ${C.border}` },
     danger:    { background: C.dangerDim, color: C.danger, border:`1px solid ${C.dangerBorder}` },
     ghost:     { background: C.cyanDim,  color: C.cyan,   border:`1px solid ${C.cyanBorder}` },
@@ -135,7 +135,7 @@ const FInput = ({ label, value, onChange, type='text', placeholder, required, ro
           ...style,
         }}
         onFocus={e => e.target.style.borderColor = C.cyan}
-        onBlur={e  => e.target.style.borderColor = 'rgba(238,238,238,0.1)'}
+        onBlur={e  => e.target.style.borderColor = 'var(--border-color)'}
       />
     </div>
   );
@@ -150,7 +150,7 @@ const FSel = ({ label, value, onChange, options=[], style={} }) => (
       outline:'none', ...style,
     }}
       onFocus={e => e.target.style.borderColor = C.cyan}
-      onBlur={e  => e.target.style.borderColor = 'rgba(238,238,238,0.1)'}
+      onBlur={e  => e.target.style.borderColor = 'var(--border-color)'}
     >
       {options.map(o => (
         <option key={o.value ?? o} value={o.value ?? o} style={{ background:C.surface }}>
@@ -390,6 +390,9 @@ export default function TrainingPage({ token, API_URL }) {
   const { activeEmployees, dispatch: hrisDispatch } = useHRIS();
 
   const getApiUrl = () => {
+    if (typeof window !== 'undefined' && window.location.hostname.includes('barokahgroupindonesia.tech')) {
+      return 'http://api.barokahgroupindonesia.tech/api';
+    }
     return `${window.location.protocol}//${window.location.host}/api`;
   };
 
@@ -1053,12 +1056,12 @@ export default function TrainingPage({ token, API_URL }) {
           </div>
           <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
             {[
-              { icon:<Calendar size={15}/>, label:'Total Jadwal', val:totalJadwal, color:C.cyan },
-              { icon:<Clock size={15}/>, label:'Akan Datang', val:totalMendatang, color:C.warn },
-              { icon:<Award size={15}/>, label:'Peserta Lulus', val:totalLulus, color:C.success },
-              { icon:<FolderOpen size={15}/>, label:'Materi', val:totalMaterial, color:'#A78BFA' },
+              { icon:<Calendar size={15}/>, label:'Total Jadwal', val:totalJadwal, color:C.cyan, border:'var(--primary-glow)' },
+              { icon:<Clock size={15}/>, label:'Akan Datang', val:totalMendatang, color:C.warn, border:'var(--warning-glow)' },
+              { icon:<Award size={15}/>, label:'Peserta Lulus', val:totalLulus, color:C.success, border:'rgba(78,205,196,0.2)' },
+              { icon:<FolderOpen size={15}/>, label:'Materi', val:totalMaterial, color:'#A78BFA', border:'rgba(167,139,250,0.2)' },
             ].map(s => (
-              <div key={s.label} style={{ background:C.bg, border:`1px solid ${s.color}33`, borderRadius:'12px', padding:'10px 16px', display:'flex', alignItems:'center', gap:'8px' }}>
+              <div key={s.label} style={{ background:C.bg, border:`1px solid ${s.border}`, borderRadius:'12px', padding:'10px 16px', display:'flex', alignItems:'center', gap:'8px' }}>
                 <span style={{ color:s.color }}>{s.icon}</span>
                 <div>
                   <p style={{ color:C.muted, fontSize:'0.68rem' }}>{s.label}</p>
