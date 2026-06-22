@@ -1,0 +1,16 @@
+# Third-party dependencies
+node_modules/
+
+# Sensitive configuration & keys
+.env
+jwt_secret.txt
+
+# Local databases & sync outputs
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+backend_sync_db.json
+
+# Uploads directory
+uploads/
+!uploads/Panduan_Kasir.pdf

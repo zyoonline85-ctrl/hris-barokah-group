@@ -1,0 +1,40 @@
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor configurations
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Log files
+*.log
+cf_tunnel.log
+
+# Compiled binaries & artifacts
+deploy-artifacts/*.apk
+cloudflared
+
+# Node.js dependencies & builds
+node_modules/
+dist/
+
+# Flutter specific paths
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+/hris-android/build/
+/hris-android/android/local.properties
+/hris-android/android/app/debug/
+/hris-android/android/app/profile/
+/hris-android/android/app/release/
