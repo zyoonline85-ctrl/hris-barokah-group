@@ -150,6 +150,35 @@ export default function App() {
     return localStorage.getItem('theme') || 'dark';
   });
 
+  // Clear old seeded mockup data from localStorage (one-time migration for live deployment)
+  useEffect(() => {
+    try {
+      const dailyLogsStr = localStorage.getItem('daily_revenue_logs');
+      if (dailyLogsStr) {
+        const dailyLogs = JSON.parse(dailyLogsStr);
+        if (Array.isArray(dailyLogs) && dailyLogs.some(log => log.id && String(log.id).includes('seed'))) {
+          const cleaned = dailyLogs.filter(log => log.id && !String(log.id).includes('seed'));
+          localStorage.setItem('daily_revenue_logs', JSON.stringify(cleaned));
+        }
+      }
+    } catch (e) {
+      console.error('Error migrating daily_revenue_logs:', e);
+    }
+
+    try {
+      const targetOmzetStr = localStorage.getItem('target_omzet_data');
+      if (targetOmzetStr) {
+        const targetOmzet = JSON.parse(targetOmzetStr);
+        if (Array.isArray(targetOmzet) && targetOmzet.some(target => target.id && String(target.id).includes('seed'))) {
+          const cleaned = targetOmzet.filter(target => target.id && !String(target.id).includes('seed'));
+          localStorage.setItem('target_omzet_data', JSON.stringify(cleaned));
+        }
+      }
+    } catch (e) {
+      console.error('Error migrating target_omzet_data:', e);
+    }
+  }, []);
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
