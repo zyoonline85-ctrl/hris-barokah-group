@@ -293,6 +293,54 @@ app.post('/api/credentials/sync', async (req, res) => {
 });
 
 
+// Endpoint mengambil daftar seluruh kredensial aktif
+app.get('/api/credentials', async (req, res) => {
+  try {
+    const list = hrisDatabase.credentials || [];
+    res.json({ status: 'success', data: list });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// Endpoint menghapus akun kredensial dan mereset ke default login NIK
+app.delete('/api/credentials/:id', async (req, res) => {
+  const { id } = req.params; // id adalah employeeId
+  try {
+    // Hapus dari daftar credentials
+    hrisDatabase.credentials = (hrisDatabase.credentials || []).filter(c => Number(c.id) !== Number(id));
+    
+    // Hapus dari user_credentials dictionary
+    if (hrisDatabase.user_credentials) {
+      if (hrisDatabase.user_credentials.passwords) delete hrisDatabase.user_credentials.passwords[id];
+      if (hrisDatabase.user_credentials.usernames) delete hrisDatabase.user_credentials.usernames[id];
+      if (hrisDatabase.user_credentials.roles) delete hrisDatabase.user_credentials.roles[id];
+    }
+    
+    saveBackendDb();
+
+    // Reset status di database MySQL users table ke default login berbasis NIK
+    const employee = await dbQuery.get("SELECT user_id, nik FROM employees WHERE id = ?", [id]);
+    if (employee && employee.user_id) {
+      const defaultEmail = `${employee.nik.toLowerCase()}@hris.local`;
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(employee.nik || '123456', salt);
+      
+      await dbQuery.run(
+        "UPDATE users SET email = ?, password_hash = ?, role = 'employee', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [defaultEmail, passwordHash, employee.user_id]
+      );
+      console.log(`[Instant Sync Delete] MySQL users table reset for employee ID ${id} (user_id ${employee.user_id})`);
+    }
+    
+    res.status(200).json({ success: true, message: "Kredensial Dihapus & Reset ke Default" });
+  } catch (err) {
+    console.error('[Instant Sync Delete] Failed to reset credentials:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+
 // --- ENDPOINTS BARU SINKRONISASI SLIP GAJI, KUIS & NOTIFIKASI ---
 
 // 2. Endpoint Kuis Kompetensi

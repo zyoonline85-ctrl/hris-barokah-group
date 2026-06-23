@@ -175,15 +175,10 @@ export default function HakUser({ token, API_URL, user }) {
     const employeeName = emp ? emp.full_name : '';
     const outlet = emp ? (emp.outlet || 'PUSAT') : 'PUSAT';
 
-    // 1. Simpan data kredensial ke localStorage secara langsung melalui hook react
+    // 1. Simpan data kredensial ke state memori
     setCustomPasswords(updatedPasswords);
     setCustomUsernames(updatedUsernames);
     setCustomRoles(updatedRoles);
-    localStorage.setItem('user_credentials', JSON.stringify({
-      passwords: updatedPasswords,
-      usernames: updatedUsernames,
-      roles: updatedRoles
-    }));
 
     // 2. Kirim ke Server (POST Request) secara real-time / paralel
     const syncPromise = fetch(`${API_URL}/credentials/sync`, {
@@ -212,7 +207,7 @@ export default function HakUser({ token, API_URL, user }) {
     }
 
     // Success notify, tutup modal, dan kosongkan form
-    alert('Kredensial berhasil disinkronkan ke server pusat dan disimpan secara lokal!');
+    alert('Kredensial berhasil disinkronkan ke server pusat!');
 
     // Reset Form
     setSelectedEmpId('');
@@ -231,16 +226,10 @@ export default function HakUser({ token, API_URL, user }) {
       delete updatedUsernames[empId];
       delete updatedRoles[empId];
 
-      // Sync instantly to backend REST API to ensure zero-stale state
+      // Sync instantly to backend REST API (DELETE request)
       try {
-        await fetch(`${API_URL}/auth/sync-credentials`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            passwords: updatedPasswords,
-            usernames: updatedUsernames,
-            roles: updatedRoles
-          })
+        await fetch(`${API_URL}/credentials/${empId}`, {
+          method: 'DELETE'
         });
       } catch (err) {
         console.error('REST sync error during delete:', err);
@@ -249,11 +238,6 @@ export default function HakUser({ token, API_URL, user }) {
       setCustomPasswords(updatedPasswords);
       setCustomUsernames(updatedUsernames);
       setCustomRoles(updatedRoles);
-      localStorage.setItem('user_credentials', JSON.stringify({
-        passwords: updatedPasswords,
-        usernames: updatedUsernames,
-        roles: updatedRoles
-      }));
     }
   };
 

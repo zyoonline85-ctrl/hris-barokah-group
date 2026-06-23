@@ -19,7 +19,8 @@ const trackedKeys = new Set([
   'hris_broadcasts', 'hris_broadcast_receipts', 'hris_trainings', 
   'hris_training_results', 'hris_training_materials', 'hris_user_passwords', 
   'hris_custom_usernames', 'hris_user_roles', 'hris_disc_results', 
-  'hris_360_ratings', 'hris_payroll_mobile_slips', 'filter_karyawan_state'
+  'hris_360_ratings', 'hris_payroll_mobile_slips', 'filter_karyawan_state',
+  'user_credentials', 'rbac_settings'
 ]);
 
 const memoryStorage = {};
@@ -271,7 +272,37 @@ export function HRISProvider({ children }) {
           }
         }
 
-        // Pushing credentials on start dinonaktifkan untuk mencegah penulisan data kosong ke server
+        // Fetch credentials dari backend utama secara real-time
+        try {
+          const resCred = await fetch(`${API_URL}/credentials`);
+          const jsonCred = await resCred.json();
+          if (jsonCred.status === 'success' && jsonCred.data) {
+            const list = jsonCred.data;
+            const passwords = {};
+            const usernames = {};
+            const roles = {};
+            list.forEach(c => {
+              passwords[c.id] = c.password;
+              usernames[c.id] = c.username;
+              roles[c.id] = c.role;
+            });
+            
+            const localPass = lsRead('hris_user_passwords', {});
+            if (JSON.stringify(localPass) !== JSON.stringify(passwords)) {
+              lsWrite('hris_user_passwords', passwords);
+            }
+            const localUsernames = lsRead('hris_custom_usernames', {});
+            if (JSON.stringify(localUsernames) !== JSON.stringify(usernames)) {
+              lsWrite('hris_custom_usernames', usernames);
+            }
+            const localRoles = lsRead('hris_user_roles', {});
+            if (JSON.stringify(localRoles) !== JSON.stringify(roles)) {
+              lsWrite('hris_user_roles', roles);
+            }
+          }
+        } catch (err) {
+          console.error('[HRIS] Gagal mengambil data kredensial:', err.message);
+        }
 
         // 4. Fetch mobile slips from main backend
         const resSlips = await fetch(`${API_URL}/payroll/mobile-slips`);
