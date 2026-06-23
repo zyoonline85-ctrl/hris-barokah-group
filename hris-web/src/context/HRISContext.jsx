@@ -13,6 +13,9 @@ import React, {
 const getApiUrl = () => {
   if (typeof window !== 'undefined') {
     let hostname = window.location.hostname;
+    if (hostname.includes('barokahgroupindonesia.tech')) {
+      return 'https://api.barokahgroupindonesia.tech/api';
+    }
     if (hostname === 'localhost') {
       hostname = '127.0.0.1';
     }

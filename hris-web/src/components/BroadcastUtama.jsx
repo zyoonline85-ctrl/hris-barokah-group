@@ -359,6 +359,9 @@ export default function BroadcastUtama() {
   const { activeEmployees, dispatch: hrisDispatch } = useHRIS();
 
   const getApiUrl = () => {
+    if (typeof window !== 'undefined' && window.location.hostname.includes('barokahgroupindonesia.tech')) {
+      return 'https://api.barokahgroupindonesia.tech/api';
+    }
     return `${window.location.protocol}//${window.location.host}/api`;
   };
 

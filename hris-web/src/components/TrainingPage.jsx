@@ -391,7 +391,7 @@ export default function TrainingPage({ token, API_URL }) {
 
   const getApiUrl = () => {
     if (typeof window !== 'undefined' && window.location.hostname.includes('barokahgroupindonesia.tech')) {
-      return 'http://api.barokahgroupindonesia.tech/api';
+      return 'https://api.barokahgroupindonesia.tech/api';
     }
     return `${window.location.protocol}//${window.location.host}/api`;
   };

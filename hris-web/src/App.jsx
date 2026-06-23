@@ -27,8 +27,17 @@ import './App.css';
 
 const getApiUrl = () => {
   if (typeof window !== 'undefined') {
-    const { protocol, host } = window.location;
-    return `${protocol}//${host}/api`;
+    let hostname = window.location.hostname;
+    if (hostname.includes('barokahgroupindonesia.tech')) {
+      return 'https://api.barokahgroupindonesia.tech/api';
+    }
+    if (hostname === 'localhost') {
+      hostname = '127.0.0.1';
+    }
+    const isTunnel = hostname.includes('localtunnel') || hostname.includes('ngrok') || hostname.includes('loca.lt') || hostname.includes('trycloudflare');
+    if (!isTunnel) {
+      return `http://${hostname}:5000/api`;
+    }
   }
   return 'http://127.0.0.1:5000/api';
 };
