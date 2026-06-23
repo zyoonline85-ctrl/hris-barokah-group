@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiClient {
-  static String defaultBaseUrl = 'https://native-boulder-exercises-dui.trycloudflare.com/api';
+  static String defaultBaseUrl = 'https://api.barokahgroupindonesia.tech/api';
   static String? _customBaseUrl;
   static bool isTabletEdition = false;
 
