@@ -10,6 +10,51 @@ import React, {
   useEffect, useCallback, useRef, useMemo
 } from 'react';
 
+// ─── In-Memory Storage Patch ─────────────────────────────────────────────────
+const trackedKeys = new Set([
+  'hris_employees', 'karyawan_data', 'outlet_cabang_data',
+  'target_omzet_data', 'daily_revenue_logs', 'target_staf_data',
+  'hris_payroll_slips', 'corporate_policies', 'quiz_bank', 
+  'quiz_bank_generated', 'quiz_results', 'hris_notifications', 
+  'hris_broadcasts', 'hris_broadcast_receipts', 'hris_trainings', 
+  'hris_training_results', 'hris_training_materials', 'hris_user_passwords', 
+  'hris_custom_usernames', 'hris_user_roles', 'hris_disc_results', 
+  'hris_360_ratings', 'hris_payroll_mobile_slips', 'filter_karyawan_state'
+]);
+
+const memoryStorage = {};
+
+if (typeof window !== 'undefined') {
+  const originalGetItem = localStorage.getItem.bind(localStorage);
+  const originalSetItem = localStorage.setItem.bind(localStorage);
+  const originalRemoveItem = localStorage.removeItem.bind(localStorage);
+
+  localStorage.getItem = function(key) {
+    if (trackedKeys.has(key)) {
+      return memoryStorage[key] || null;
+    }
+    return originalGetItem(key);
+  };
+
+  localStorage.setItem = function(key, value) {
+    if (trackedKeys.has(key)) {
+      memoryStorage[key] = String(value);
+      window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key, value } }));
+      return;
+    }
+    return originalSetItem(key, value);
+  };
+
+  localStorage.removeItem = function(key) {
+    if (trackedKeys.has(key)) {
+      delete memoryStorage[key];
+      window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key, value: null } }));
+      return;
+    }
+    return originalRemoveItem(key);
+  };
+}
+
 const getApiUrl = () => {
   if (typeof window !== 'undefined') {
     let hostname = window.location.hostname;
@@ -94,7 +139,7 @@ const HRISContext = createContext(null);
 
 const lsRead = (key, fallback = null) => {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = trackedKeys.has(key) ? memoryStorage[key] : localStorage.getItem(key);
     return raw ? JSON.parse(raw) : fallback;
   } catch {
     return fallback;
@@ -104,9 +149,12 @@ const lsRead = (key, fallback = null) => {
 const lsWrite = (key, value) => {
   try {
     const serialized = JSON.stringify(value);
-    // Bypass patched setItem untuk avoid double event
-    Object.getPrototypeOf(localStorage).setItem.call(localStorage, key, serialized);
-    window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key, value } }));
+    if (trackedKeys.has(key)) {
+      memoryStorage[key] = serialized;
+      window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key, value } }));
+    } else {
+      Object.getPrototypeOf(localStorage).setItem.call(localStorage, key, serialized);
+    }
   } catch (e) {
     console.error('[HRIS] lsWrite failed:', key, e);
   }
@@ -166,128 +214,34 @@ export function HRISProvider({ children }) {
     return () => window.removeEventListener('storage', h);
   }, [applyKey]);
 
-  // Monkey-patch localStorage.setItem untuk intercept semua writes
+  // Handle sync user_credentials di memori
   useEffect(() => {
-    const tracked = new Set(['hris_employees','karyawan_data','outlet_cabang_data',
-      'target_omzet_data','daily_revenue_logs','target_staf_data','hris_payroll_slips',
-      'quiz_bank','quiz_bank_generated','quiz_results','hris_notifications',
-      'hris_broadcasts','hris_broadcast_receipts',
-      'hris_trainings','hris_training_results','hris_training_materials',
-      'hris_user_passwords','hris_custom_usernames','hris_user_roles', 'hris_disc_results','hris_360_ratings','hris_payroll_mobile_slips']);
-    const proto = Object.getPrototypeOf(localStorage);
-    const original = proto.setItem.bind(localStorage);
-    proto.setItem = function(key, value) {
-      original(key, value);
-      if (tracked.has(key)) {
-        window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key, value } }));
-      }
+    const handleCredentialChange = (e) => {
+      const { key } = e.detail || {};
       if (key === 'hris_user_passwords' || key === 'hris_custom_usernames' || key === 'hris_user_roles') {
         try {
           const passwords = JSON.parse(localStorage.getItem('hris_user_passwords') || '{}');
           const usernames = JSON.parse(localStorage.getItem('hris_custom_usernames') || '{}');
           const roles = JSON.parse(localStorage.getItem('hris_user_roles') || '{}');
-          original('user_credentials', JSON.stringify({ passwords, usernames, roles }));
-        } catch (e) {}
+          memoryStorage['user_credentials'] = JSON.stringify({ passwords, usernames, roles });
+        } catch (err) {}
       }
     };
-    return () => { proto.setItem = original; };
+    window.addEventListener('hris:storage', handleCredentialChange);
+    return () => window.removeEventListener('hris:storage', handleCredentialChange);
   }, []);
 
-  // Initialize unified user_credentials on startup
+  // Inisialisasi awal user_credentials di memori
   useEffect(() => {
     try {
       const passwords = JSON.parse(localStorage.getItem('hris_user_passwords') || '{}');
       const usernames = JSON.parse(localStorage.getItem('hris_custom_usernames') || '{}');
       const roles = JSON.parse(localStorage.getItem('hris_user_roles') || '{}');
-      localStorage.setItem('user_credentials', JSON.stringify({ passwords, usernames, roles }));
+      memoryStorage['user_credentials'] = JSON.stringify({ passwords, usernames, roles });
     } catch (e) {}
   }, []);
 
-  // Sync with localserver.js
-  useEffect(() => {
-    const fetchLatestServerState = async () => {
-      try {
-        const res = await fetch(SYNC_API_URL);
-        const json = await res.json();
-        if (json.status === 'success' && json.serverState) {
-          const state = json.serverState;
-          Object.keys(state).forEach(key => {
-            if (state[key] && (!localStorage.getItem(key) || localStorage.getItem(key) !== JSON.stringify(state[key]))) {
-              Object.getPrototypeOf(localStorage).setItem.call(localStorage, key, JSON.stringify(state[key]));
-              if (key === 'hris_employees') setEmployees(state[key]);
-              if (key === 'outlet_cabang_data') setOutlets(state[key]);
-              if (key === 'target_omzet_data') setTargetOmzet(state[key]);
-              if (key === 'daily_revenue_logs') setDailyRevenue(state[key]);
-              if (key === 'target_staf_data') setTargetStaf(state[key]);
-            }
-          });
-        }
-      } catch (e) {
-        console.log('localserver.js not running or unreachable on port 3001.');
-      }
-    };
-    fetchLatestServerState();
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const res = await fetch(SYNC_API_URL);
-        const json = await res.json();
-        if (json.status === 'success' && json.serverState) {
-          const state = json.serverState;
-          const keysToSync = ['hris_disc_results', 'hris_360_ratings', 'quiz_results', 'hris_user_passwords', 'hris_custom_usernames', 'hris_user_roles'];
-          keysToSync.forEach(key => {
-            if (state[key] && localStorage.getItem(key) !== JSON.stringify(state[key])) {
-              Object.getPrototypeOf(localStorage).setItem.call(localStorage, key, JSON.stringify(state[key]));
-              window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key, value: state[key] } }));
-            }
-          });
-        }
-      } catch (e) {}
-    }, 5000);
-    return () => clearInterval(pollInterval);
-  }, []);
-
-  // Sync outbound writes to localserver.js
-  useEffect(() => {
-    let debounceTimer;
-    const trackedKeys = new Set([
-      'hris_employees', 'karyawan_data', 'outlet_cabang_data',
-      'target_omzet_data', 'daily_revenue_logs', 'target_staf_data',
-      'hris_payroll_slips', 'quiz_bank', 'quiz_bank_generated',
-      'quiz_results', 'hris_notifications', 'hris_broadcasts',
-      'hris_broadcast_receipts', 'hris_trainings', 'hris_training_results',
-      'hris_training_materials', 'hris_disc_results', 'hris_360_ratings',
-      'hris_user_passwords', 'hris_custom_usernames', 'hris_user_roles',
-      'hris_payroll_mobile_slips'
-    ]);
-
-    const handleStorageChange = (e) => {
-      const { key } = e.detail || {};
-      if (key && trackedKeys.has(key)) {
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(async () => {
-          const payload = {};
-          trackedKeys.forEach(k => {
-            const v = localStorage.getItem(k);
-            try { payload[k] = v ? JSON.parse(v) : null; } catch { payload[k] = v; }
-          });
-          try {
-            await fetch(SYNC_API_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ data: payload })
-            });
-          } catch (err) {}
-        }, 1000);
-      }
-    };
-
-    window.addEventListener('hris:storage', handleStorageChange);
-    return () => {
-      window.removeEventListener('hris:storage', handleStorageChange);
-      if (debounceTimer) clearTimeout(debounceTimer);
-    };
-  }, []);
+  // Pembersihan local sync port 3001 (Dinonaktifkan demi kueri langsung ke database VPS)
 
   // Sync with main backend (port 5000)
   useEffect(() => {
@@ -317,15 +271,7 @@ export function HRISProvider({ children }) {
           }
         }
 
-        // 3. Push credentials to main backend to ensure zero-stale state on start
-        const localPass = lsRead('hris_user_passwords', {});
-        const localUsernames = lsRead('hris_custom_usernames', {});
-        const localRoles = lsRead('hris_user_roles', {});
-        await fetch(`${API_URL}/auth/sync-credentials`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ passwords: localPass, usernames: localUsernames, roles: localRoles })
-        });
+        // Pushing credentials on start dinonaktifkan untuk mencegah penulisan data kosong ke server
 
         // 4. Fetch mobile slips from main backend
         const resSlips = await fetch(`${API_URL}/payroll/mobile-slips`);
@@ -385,18 +331,7 @@ export function HRISProvider({ children }) {
           });
         } catch (err) {}
       }
-      if (key === 'hris_user_passwords' || key === 'hris_custom_usernames' || key === 'hris_user_roles') {
-        const passwords = lsRead('hris_user_passwords', {});
-        const usernames = lsRead('hris_custom_usernames', {});
-        const roles = lsRead('hris_user_roles', {});
-        try {
-          await fetch(`${API_URL}/auth/sync-credentials`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ passwords, usernames, roles })
-          });
-        } catch (err) {}
-      }
+      // Pushing credentials on change dinonaktifkan
       if (key === 'hris_payroll_mobile_slips') {
         try {
           await fetch(`${API_URL}/payroll/mobile-slips`, {
