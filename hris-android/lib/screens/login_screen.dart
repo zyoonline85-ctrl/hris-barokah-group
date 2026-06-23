@@ -20,10 +20,6 @@ class _LoginScreenState extends State<LoginScreen>
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
 
-  List<dynamic> _publicUsers = [];
-  bool _loadingPublicUsers = false;
-  String? _selectedBypassUser;
-
   @override
   void initState() {
     super.initState();
@@ -40,24 +36,6 @@ class _LoginScreenState extends State<LoginScreen>
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
     _animController.forward();
-    _fetchPublicUsers();
-  }
-
-  Future<void> _fetchPublicUsers() async {
-    setState(() => _loadingPublicUsers = true);
-    try {
-      final res = await ApiClient.get('mobile/public-users');
-      final data = jsonDecode(res.body);
-      if (res.statusCode == 200 && data['status'] == 'success') {
-        setState(() {
-          _publicUsers = data['data'] ?? [];
-        });
-      }
-    } catch (e) {
-      print('Error fetching public users: $e');
-    } finally {
-      setState(() => _loadingPublicUsers = false);
-    }
   }
 
   @override
@@ -141,7 +119,7 @@ class _LoginScreenState extends State<LoginScreen>
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Pilih karyawan di bawah ini untuk masuk secara instan tanpa mengetik sandi.',
+                      'Silakan masuk ke akun Anda menggunakan ID Pengguna dan Password.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: textMuted,
@@ -150,61 +128,6 @@ class _LoginScreenState extends State<LoginScreen>
                       ),
                     ),
                     const SizedBox(height: 16),
-
-                    if (_publicUsers.isNotEmpty) ...[
-                      Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.only(bottom: 24),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: bgCard,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: accentCyan.withOpacity(0.4), width: 1.5),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            dropdownColor: bgCard,
-                            isExpanded: true,
-                            hint: const Row(
-                              children: [
-                                Icon(Icons.bolt_rounded, color: accentCyan, size: 20),
-                                SizedBox(width: 8),
-                                Text(
-                                  'PILIH KARYAWAN (LOGIN INSTAN)',
-                                  style: TextStyle(color: accentCyan, fontSize: 13, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                            value: _selectedBypassUser,
-                            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: accentCyan),
-                            items: _publicUsers.map<DropdownMenuItem<String>>((user) {
-                              return DropdownMenuItem<String>(
-                                value: user['id'].toString(),
-                                child: Text(
-                                  '${user['full_name']} - ${user['position']} (${user['outlet']})',
-                                  style: const TextStyle(color: textMain, fontSize: 13, fontWeight: FontWeight.w600),
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                final selected = _publicUsers.firstWhere((u) => u['id'].toString() == val);
-                                setState(() {
-                                  _selectedBypassUser = val;
-                                  _usernameController.text = selected['username'] ?? '';
-                                  _passwordController.text = selected['password'] ?? '';
-                                });
-                                // Auto-trigger login
-                                authProvider.login(
-                                  selected['username'] ?? '',
-                                  selected['password'] ?? '',
-                                );
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
 
                     // Card Form
                     Container(
@@ -433,22 +356,6 @@ class _LoginScreenState extends State<LoginScreen>
                       ),
                     ),
 
-                    const SizedBox(height: 28),
-
-                    // Tombol Konfigurasi Server (kecil, tidak mencolok)
-                    TextButton.icon(
-                      onPressed: () => _showServerConfigDialog(context),
-                      icon: const Icon(Icons.settings_ethernet_rounded,
-                          color: Color(0xFF4A5568), size: 15),
-                      label: const Text(
-                        'Konfigurasi Server',
-                        style: TextStyle(
-                          color: Color(0xFF4A5568),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -456,84 +363,6 @@ class _LoginScreenState extends State<LoginScreen>
           ),
         ),
       ),
-    );
-  }
-
-  void _showServerConfigDialog(BuildContext context) {
-    final controller = TextEditingController(text: ApiClient.baseUrl);
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1A2035),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: Color(0xFF2A3450))),
-          title: const Text(
-            'Konfigurasi Server API',
-            style: TextStyle(
-                color: Color(0xFFEEEEEE), fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Masukkan alamat server API (Cloudflare/Localtunnel/IP Lokal):',
-                style: TextStyle(color: Color(0xFF8892A4), fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                style: const TextStyle(color: Color(0xFFEEEEEE)),
-                decoration: InputDecoration(
-                  hintText: 'http://192.168.1.x:5000/api',
-                  hintStyle: const TextStyle(color: Color(0xFF4A5568)),
-                  filled: true,
-                  fillColor: const Color(0xFF141929),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF2A3450)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(
-                        color: Color(0xFF00ADB5), width: 1.5),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('BATAL',
-                  style: TextStyle(color: Color(0xFF4A5568))),
-            ),
-            TextButton(
-              onPressed: () async {
-                final url = controller.text.trim();
-                if (url.isNotEmpty) {
-                  await ApiClient.setCustomBaseUrl(url);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Server: ${ApiClient.baseUrl}'),
-                        backgroundColor: const Color(0xFF00ADB5),
-                      ),
-                    );
-                    Navigator.pop(context);
-                  }
-                }
-              },
-              child: const Text('SIMPAN',
-                  style: TextStyle(
-                      color: Color(0xFF00ADB5),
-                      fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      },
     );
   }
 }

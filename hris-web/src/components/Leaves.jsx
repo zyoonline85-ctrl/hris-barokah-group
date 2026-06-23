@@ -516,7 +516,8 @@ export default function Leaves({ token, API_URL, userPermissions, user }) {
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
     try {
-      const parts = dateStr.split('-');
+      const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.split(' ')[0];
+      const parts = cleanDate.split('-');
       if (parts.length === 3) {
         return `${parts[2]}/${parts[1]}/${parts[0]}`;
       }

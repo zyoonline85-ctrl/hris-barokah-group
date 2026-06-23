@@ -4,46 +4,19 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiClient {
-  static String defaultBaseUrl = 'https://api.barokahgroupindonesia.tech/api';
-  static String? _customBaseUrl;
-  static bool isTabletEdition = false;
+  static const String defaultBaseUrl = 'https://api.barokahgroupindonesia.tech/api';
+  static bool isTabletEdition = true;
 
   static Future<String> getBaseUrl() async {
-    if (_customBaseUrl != null) return _customBaseUrl!;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedUrl = prefs.getString('custom_api_url');
-      if (savedUrl != null && savedUrl.isNotEmpty) {
-        _customBaseUrl = savedUrl;
-        return savedUrl;
-      }
-    } catch (e) {
-      print('ApiClient: Gagal membaca custom_api_url: $e');
-    }
     return defaultBaseUrl;
   }
 
-  static Future<void> setCustomBaseUrl(String url) async {
-    String cleanUrl = url.trim();
-    if (cleanUrl.endsWith('/')) {
-      cleanUrl = cleanUrl.substring(0, cleanUrl.length - 1);
-    }
-    if (!cleanUrl.endsWith('/api') && !cleanUrl.contains('/api/')) {
-      cleanUrl = '$cleanUrl/api';
-    }
-    _customBaseUrl = cleanUrl;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('custom_api_url', cleanUrl);
-  }
+  static Future<void> setCustomBaseUrl(String url) async {}
 
-  static Future<void> resetCustomBaseUrl() async {
-    _customBaseUrl = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('custom_api_url');
-  }
+  static Future<void> resetCustomBaseUrl() async {}
 
   static String get baseUrl {
-    return _customBaseUrl ?? defaultBaseUrl;
+    return defaultBaseUrl;
   }
 
   // Callback statis yang akan di-register oleh AuthProvider untuk melempar user ke login
