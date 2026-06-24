@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
@@ -17,6 +18,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
+  Timer? _retryTimer;
 
   final List<Widget> _screens = const [
     DashboardScreen(),
@@ -35,12 +37,36 @@ class _MainScreenState extends State<MainScreen> {
   ];
 
   @override
+  void dispose() {
+    _retryTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startAutoRetry(AuthProvider auth) {
+    _retryTimer?.cancel();
+    _retryTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (auth.connectionError && !auth.isLoading) {
+        auth.fetchInitialData();
+      } else {
+        _retryTimer?.cancel();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     const darkBg = Color(0xFF222831); // Hitam Pekat
     const cardBg = Color(0xFF393E46); // Cokelat Tua
     const violet = Color(0xFFEEEEEE); // Krem (accent)
     const textMuted = Color(0x8DEEEEEE); // Krem muted
+
+    // Jika koneksi error, mulai auto-retry agar layar hilang sendiri saat internet kembali
+    if (auth.connectionError) {
+      _startAutoRetry(auth);
+    } else {
+      _retryTimer?.cancel();
+    }
 
     return Scaffold(
       backgroundColor: darkBg,

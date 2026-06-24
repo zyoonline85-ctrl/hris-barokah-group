@@ -90,16 +90,23 @@ class AuthProvider extends ChangeNotifier {
   String? get attendanceSuccess => _attendanceSuccess;
   bool get connectionError => _connectionError;
 
+  /// Hanya set connectionError=true jika BENAR-BENAR terjadi kegagalan jaringan
+  /// (SocketException, Timeout, HandshakeException, dsb).
+  /// HTTP 4xx/5xx dari server BUKAN network error — jangan tampilkan layar disconnect.
   void _handleConnectionError(dynamic e, String method) {
     print('$method Connection Error: $e');
     final errStr = e.toString().toLowerCase();
     final isNetworkException = errStr.contains('socketexception') ||
-        errStr.contains('timeout') ||
+        errStr.contains('timeoutexception') ||
         errStr.contains('clientexception') ||
         errStr.contains('connection failed') ||
-        errStr.contains('handshakeexception');
+        errStr.contains('handshakeexception') ||
+        errStr.contains('connection refused') ||
+        errStr.contains('network is unreachable') ||
+        errStr.contains('failed host lookup');
 
-    if (method == 'FetchProfile' || isNetworkException) {
+    // Hanya tampilkan layar disconnect jika jaringan benar-benar tidak tersedia
+    if (isNetworkException) {
       _connectionError = true;
       _errorMessage = 'Gagal menghubungkan ke server API backend.';
     }
@@ -283,8 +290,20 @@ class AuthProvider extends ChangeNotifier {
         fetchQuizAttempts(),
       ]);
     } catch (e) {
+      // Hanya set connectionError jika ini benar-benar kegagalan jaringan
+      final errStr = e.toString().toLowerCase();
+      final isNetworkException = errStr.contains('socketexception') ||
+          errStr.contains('timeoutexception') ||
+          errStr.contains('clientexception') ||
+          errStr.contains('connection failed') ||
+          errStr.contains('handshakeexception') ||
+          errStr.contains('connection refused') ||
+          errStr.contains('network is unreachable') ||
+          errStr.contains('failed host lookup');
+      if (isNetworkException) {
+        _connectionError = true;
+      }
       print('FetchInitialData Error: $e');
-      _connectionError = true;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -297,9 +316,15 @@ class AuthProvider extends ChangeNotifier {
       final data = jsonDecode(res.body);
       if (res.statusCode == 200 && data['status'] == 'success') {
         _profile = FullEmployeeProfile.fromJson(data['data']['user']);
+        // Koneksi berhasil — pastikan connectionError di-reset
+        _connectionError = false;
         notifyListeners();
+      } else {
+        // HTTP error (401/403/500) — jangan tampilkan disconnect screen
+        print('FetchProfile HTTP ${res.statusCode}: ${res.body}');
       }
     } catch (e) {
+      // Hanya tampilkan disconnect screen untuk error jaringan
       _handleConnectionError(e, 'FetchProfile');
     }
   }
