@@ -11,6 +11,8 @@ WORKSPACE_DIR="/Volumes/Macintosh HD - Data/Users/macair/hris-sistem"
 ANDROID_DIR="$WORKSPACE_DIR/hris-android"
 DEPLOY_DIR="$WORKSPACE_DIR/deploy-artifacts"
 ARTIFACT_DIR="/Users/macbookargun/.gemini/antigravity/brain/f24306c1-2e02-48bd-a9c4-d35f9a866597"
+MOBILE_VER="v1.3"
+TABLET_VER="v1.1"
 
 # --- Environment Variables ---
 export ANDROID_HOME="$HOME/Library/Android/sdk"
@@ -41,13 +43,13 @@ flutter build apk --release --target-platform android-arm64
 
 echo "=== Copying Phone Edition APK ==="
 if [ -f build/app/outputs/flutter-apk/app-release.apk ]; then
-  cp build/app/outputs/flutter-apk/app-release.apk "$DEPLOY_DIR/BarokahGrup_Karyawan_Mobile_v1.0.apk"
-  cp build/app/outputs/flutter-apk/app-release.apk "$ARTIFACT_DIR/BarokahGrup_Karyawan_Mobile_v1.0.apk"
-  echo "✅ Mobile APK berhasil: $DEPLOY_DIR/BarokahGrup_Karyawan_Mobile_v1.0.apk"
+  cp build/app/outputs/flutter-apk/app-release.apk "$DEPLOY_DIR/BarokahGrup_Karyawan_Mobile_$MOBILE_VER.apk"
+  cp build/app/outputs/flutter-apk/app-release.apk "$ARTIFACT_DIR/BarokahGrup_Karyawan_Mobile_$MOBILE_VER.apk"
+  echo "✅ Mobile APK berhasil: $DEPLOY_DIR/BarokahGrup_Karyawan_Mobile_$MOBILE_VER.apk"
 elif [ -f build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ]; then
-  cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$DEPLOY_DIR/BarokahGrup_Karyawan_Mobile_v1.0.apk"
-  cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$ARTIFACT_DIR/BarokahGrup_Karyawan_Mobile_v1.0.apk"
-  echo "✅ Mobile APK berhasil: $DEPLOY_DIR/BarokahGrup_Karyawan_Mobile_v1.0.apk"
+  cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$DEPLOY_DIR/BarokahGrup_Karyawan_Mobile_$MOBILE_VER.apk"
+  cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$ARTIFACT_DIR/BarokahGrup_Karyawan_Mobile_$MOBILE_VER.apk"
+  echo "✅ Mobile APK berhasil: $DEPLOY_DIR/BarokahGrup_Karyawan_Mobile_$MOBILE_VER.apk"
 else
   echo "❌ ERROR: APK Mobile tidak ditemukan di build output!"
   exit 1
@@ -65,13 +67,13 @@ flutter build apk --release --target-platform android-arm64
 
 echo "=== Copying Tablet Edition APK ==="
 if [ -f build/app/outputs/flutter-apk/app-release.apk ]; then
-  cp build/app/outputs/flutter-apk/app-release.apk "$DEPLOY_DIR/BarokahGrup_Operasional_Tablet_v1.0.apk"
-  cp build/app/outputs/flutter-apk/app-release.apk "$ARTIFACT_DIR/BarokahGrup_Operasional_Tablet_v1.0.apk"
-  echo "✅ Tablet APK berhasil: $DEPLOY_DIR/BarokahGrup_Operasional_Tablet_v1.0.apk"
+  cp build/app/outputs/flutter-apk/app-release.apk "$DEPLOY_DIR/BarokahGrup_Operasional_Tablet_$TABLET_VER.apk"
+  cp build/app/outputs/flutter-apk/app-release.apk "$ARTIFACT_DIR/BarokahGrup_Operasional_Tablet_$TABLET_VER.apk"
+  echo "✅ Tablet APK berhasil: $DEPLOY_DIR/BarokahGrup_Operasional_Tablet_$TABLET_VER.apk"
 elif [ -f build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ]; then
-  cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$DEPLOY_DIR/BarokahGrup_Operasional_Tablet_v1.0.apk"
-  cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$ARTIFACT_DIR/BarokahGrup_Operasional_Tablet_v1.0.apk"
-  echo "✅ Tablet APK berhasil: $DEPLOY_DIR/BarokahGrup_Operasional_Tablet_v1.0.apk"
+  cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$DEPLOY_DIR/BarokahGrup_Operasional_Tablet_$TABLET_VER.apk"
+  cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$ARTIFACT_DIR/BarokahGrup_Operasional_Tablet_$TABLET_VER.apk"
+  echo "✅ Tablet APK berhasil: $DEPLOY_DIR/BarokahGrup_Operasional_Tablet_$TABLET_VER.apk"
 else
   echo "❌ ERROR: APK Tablet tidak ditemukan di build output!"
   exit 1
@@ -89,8 +91,8 @@ echo ""
 echo "============================================"
 echo " ✅ HRIS Barokah APK Build Selesai!"
 echo "============================================"
-echo " Mobile Karyawan : $DEPLOY_DIR/BarokahGrup_Karyawan_Mobile_v1.0.apk"
-echo " Tablet Operasional: $DEPLOY_DIR/BarokahGrup_Operasional_Tablet_v1.0.apk"
+echo " Mobile Karyawan : $DEPLOY_DIR/BarokahGrup_Karyawan_Mobile_$MOBILE_VER.apk"
+echo " Tablet Operasional: $DEPLOY_DIR/BarokahGrup_Operasional_Tablet_$TABLET_VER.apk"
 echo " API URL          : https://api.barokahgroupindonesia.tech/api"
 echo "============================================"
 ls -lh "$DEPLOY_DIR/"

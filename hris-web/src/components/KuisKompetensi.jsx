@@ -41,9 +41,15 @@ const capitalEachWord = (str = '') =>
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 const lsGet = (key, fallback = []) => {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+  try {
+    const v = localStorage.getItem(key);
+    if (!v) return fallback;
+    const parsed = JSON.parse(v);
+    return (parsed !== null && parsed !== undefined) ? parsed : fallback;
+  }
   catch { return fallback; }
 };
+
 
 const lsSet = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); }
@@ -641,25 +647,28 @@ export default function KuisKompetensi() {
   const [notifications, setNotifications] = useState(() => lsGet('hris_notifications', []));
   const [surveys, setSurveys] = useState(() => {
     const main = lsGet('hris_surveys', []);
-    if (main.length > 0) return main;
+    const validMain = Array.isArray(main) ? main : [];
+    if (validMain.length > 0) return validMain;
     const defaultSurveys = [
       {
         id: 'srv-001',
         title: 'Survey Kepuasan Kerja & Lingkungan Kerja Cabang',
-        target_divisi: 'Semua',
+        startDate: '2026-06-01',
+        endDate: '2026-07-01',
+        outlets: [],
         questions: [
-          'Seberapa puas Anda dengan lingkungan fisik tempat Anda bekerja?',
-          'Apakah peralatan kerja yang disediakan memadai untuk tugas Anda?',
-          'Bagaimana hubungan koordinasi Anda dengan kepala cabang?',
-          'Seberapa jelas pembagian tugas dan peran Anda sehari-hari?',
-          'Apakah Anda merasa durasi istirahat yang diberikan sudah adil?',
-          'Bagaimana penilaian Anda terhadap kebersihan outlet tempat Anda bekerja?',
-          'Seberapa baik komunikasi antar staf di outlet Anda?',
-          'Apakah Anda merasa dihargai oleh perusahaan atas kontribusi Anda?',
-          'Seberapa aman Anda merasa saat bekerja di outlet?',
-          'Seberapa besar motivasi Anda untuk terus bekerja di Barokah Grup?'
+          { id: 'q0', text: 'Seberapa puas Anda dengan lingkungan fisik tempat Anda bekerja?', options: { a: 'Sangat Puas', b: 'Puas', c: 'Cukup Puas', d: 'Kurang Puas' } },
+          { id: 'q1', text: 'Apakah peralatan kerja yang disediakan memadai untuk tugas Anda?', options: { a: 'Sangat Memadai', b: 'Memadai', c: 'Cukup Memadai', d: 'Kurang Memadai' } },
+          { id: 'q2', text: 'Bagaimana hubungan koordinasi Anda dengan kepala cabang?', options: { a: 'Sangat Baik', b: 'Baik', c: 'Cukup Baik', d: 'Kurang Baik' } },
+          { id: 'q3', text: 'Seberapa jelas pembagian tugas dan peran Anda sehari-hari?', options: { a: 'Sangat Jelas', b: 'Jelas', c: 'Cukup Jelas', d: 'Kurang Jelas' } },
+          { id: 'q4', text: 'Apakah Anda merasa durasi istirahat yang diberikan sudah adil?', options: { a: 'Sangat Adil', b: 'Adil', c: 'Cukup Adil', d: 'Kurang Adil' } },
+          { id: 'q5', text: 'Bagaimana penilaian Anda terhadap kebersihan outlet tempat Anda bekerja?', options: { a: 'Sangat Bersih', b: 'Bersih', c: 'Cukup Bersih', d: 'Kurang Bersih' } },
+          { id: 'q6', text: 'Seberapa baik komunikasi antar staf di outlet Anda?', options: { a: 'Sangat Baik', b: 'Baik', c: 'Cukup Baik', d: 'Kurang Baik' } },
+          { id: 'q7', text: 'Apakah Anda merasa dihargai oleh perusahaan atas kontribusi Anda?', options: { a: 'Sangat Dihargai', b: 'Dihargai', c: 'Cukup Dihargai', d: 'Kurang Dihargai' } },
+          { id: 'q8', text: 'Seberapa aman Anda merasa saat bekerja di outlet?', options: { a: 'Sangat Aman', b: 'Aman', c: 'Cukup Aman', d: 'Kurang Aman' } },
+          { id: 'q9', text: 'Seberapa besar motivasi Anda untuk terus bekerja di Barokah Grup?', options: { a: 'Sangat Besar', b: 'Besar', c: 'Cukup Besar', d: 'Kurang Besar' } }
         ],
-        status: 'terkirim',
+        status: 'aktif',
         created_at: new Date(Date.now() - 5 * 24 * 3600000).toISOString()
       }
     ];
@@ -668,40 +677,35 @@ export default function KuisKompetensi() {
   });
   const [surveyResponses, setSurveyResponses] = useState(() => {
     const resp = lsGet('hris_survey_responses', []);
-    if (resp.length > 0) return resp;
+    const validResp = Array.isArray(resp) ? resp : [];
+    if (validResp.length > 0) return validResp;
     const defaultResponses = [
       {
         id: 'sr-001',
-        survey_id: 'srv-001',
-        survey_title: 'Survey Kepuasan Kerja & Lingkungan Kerja Cabang',
-        employee_id: 1,
-        employee_name: 'Budi Santoso',
+        surveyId: 'srv-001',
+        employeeId: '1',
+        employeeName: 'Budi Santoso',
         outlet: 'AYAM PECAK 2001 SEAFOOD TEBING TINGGI',
-        answers: [5, 4, 5, 4, 3, 5, 4, 4, 5, 5],
-        read_status: 'read',
-        submitted_at: new Date(Date.now() - 4 * 24 * 3600000).toISOString()
+        answers: { q0: 'a', q1: 'b', q2: 'a', q3: 'b', q4: 'c', q5: 'a', q6: 'b', q7: 'b', q8: 'a', q9: 'a' },
+        submittedAt: new Date(Date.now() - 4 * 24 * 3600000).toISOString()
       },
       {
         id: 'sr-002',
-        survey_id: 'srv-001',
-        survey_title: 'Survey Kepuasan Kerja & Lingkungan Kerja Cabang',
-        employee_id: 2,
-        employee_name: 'Siti Rahma',
+        surveyId: 'srv-001',
+        employeeId: '2',
+        employeeName: 'Siti Rahma',
         outlet: 'AYAM PECAK 2001 SEAFOOD KISARAN',
-        answers: [4, 4, 3, 5, 4, 4, 5, 3, 4, 4],
-        read_status: 'read',
-        submitted_at: new Date(Date.now() - 3 * 24 * 3600000).toISOString()
+        answers: { q0: 'b', q1: 'b', q2: 'c', q3: 'a', q4: 'b', q5: 'b', q6: 'a', q7: 'c', q8: 'b', q9: 'b' },
+        submittedAt: new Date(Date.now() - 3 * 24 * 3600000).toISOString()
       },
       {
         id: 'sr-003',
-        survey_id: 'srv-001',
-        survey_title: 'Survey Kepuasan Kerja & Lingkungan Kerja Cabang',
-        employee_id: 3,
-        employee_name: 'Agus Wijaya',
+        surveyId: 'srv-001',
+        employeeId: '3',
+        employeeName: 'Agus Wijaya',
         outlet: 'PECEL LELE PAK HAJI KISARAN',
-        answers: [3, 2, 4, 4, 3, 4, 3, 4, 5, 4],
-        read_status: 'read',
-        submitted_at: new Date(Date.now() - 2 * 24 * 3600000).toISOString()
+        answers: { q0: 'c', q1: 'c', q2: 'b', q3: 'b', q4: 'c', q5: 'b', q6: 'c', q7: 'b', q8: 'a', q9: 'b' },
+        submittedAt: new Date(Date.now() - 2 * 24 * 3600000).toISOString()
       }
     ];
     localStorage.setItem('hris_survey_responses', JSON.stringify(defaultResponses));
@@ -852,7 +856,7 @@ export default function KuisKompetensi() {
 
   // ── Survey Helper Methods
   const getResponsesCount = (surveyId) => {
-    return surveyResponses.filter(r => r.survey_id === surveyId).length;
+    return surveyResponses.filter(r => (r.surveyId || r.survey_id) === surveyId).length;
   };
 
   const getSurveyStats = (survey) => {
@@ -1803,7 +1807,7 @@ export default function KuisKompetensi() {
                         {surveys.map((srv) => (
                           <tr key={srv.id} className="kuis-row" style={{ borderBottom: `1px solid ${C.border}`, transition: 'background 0.15s' }}>
                             <td style={{ padding: '14px 16px', color: C.text, fontWeight: 600 }}>
-                              <button onClick={() => { setSurveyPreviewData(srv); setShowSurveyPreviewModal(true); }} style={{ background: 'transparent', border: 'none', color: C.text, padding: 0, fontWeight: 700, cursor: 'pointer', textAlign: 'left', hover: { color: C.cyan } }}>
+                              <button onClick={() => { setSurveyPreviewData(srv); setShowSurveyPreviewModal(true); }} style={{ background: 'transparent', border: 'none', color: C.text, padding: 0, fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}>
                                 📋 {srv.title}
                               </button>
                             </td>

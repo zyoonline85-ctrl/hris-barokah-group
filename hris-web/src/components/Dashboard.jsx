@@ -1728,70 +1728,6 @@ const employeeCount = Math.max(0, totalAccounts - ownerCount - adminCount);
 
 
 
-      {/* Hero Header */}
-      <div className="dashboard-header-container">
-        <div className="dashboard-header-left">
-          <h2>DASHBOARD METRIK UTAMA & KPI SISTEM</h2>
-          <p>Kompilasi ringkasan visual interaktif dari setiap halaman modul operasional dan administratif HRIS Anda.</p>
-        </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button
-            onClick={clearDashboardTrash}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              background: 'rgba(239, 68, 68, 0.12)',
-              border: '1px solid rgba(239, 68, 68, 0.35)',
-              color: '#fca5a5',
-              borderRadius: '10px',
-              padding: '10px 18px',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              position: 'relative',
-              zIndex: 2,
-              flexShrink: 0
-            }}
-          >
-            <RotateCcw size={16} />
-            <span>RESET DASBOR</span>
-          </button>
-
-          <button
-            id="dashboard-filter-btn"
-            onClick={() => setShowFilterPanel(v => !v)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              background: showFilterPanel ? 'rgba(255,98,188,0.25)' : 'rgba(255,255,255,0.12)',
-              border: '1px solid rgba(255,98,188,0.45)',
-              color: 'var(--bg-surface)',
-              borderRadius: '10px',
-              padding: '10px 18px',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              position: 'relative',
-              zIndex: 2,
-              flexShrink: 0
-            }}
-          >
-            <SlidersHorizontal size={16} />
-            <span>FILTER TAMPILAN</span>
-            {hiddenCount > 0 && (
-              <span style={{
-                background: '#ff62bc', color: '#fff', borderRadius: '50%',
-                width: '18px', height: '18px', fontSize: '0.6rem', fontWeight: 800,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                position: 'absolute', top: '-7px', right: '-7px'
-              }}>
-                {hiddenCount}
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
-
       {/* ─── MAIN CONTROL MULTI-FILTER ENGINE ─── */}
       <div style={{
         background: 'rgba(57, 62, 70, 0.7)',
@@ -2072,6 +2008,70 @@ const employeeCount = Math.max(0, totalAccounts - ownerCount - adminCount);
           ))}
         </div>
       )}
+
+      {/* Hero Header */}
+      <div className="dashboard-header-container">
+        <div className="dashboard-header-left">
+          <h2>DASHBOARD METRIK UTAMA & KPI SISTEM</h2>
+          <p>Kompilasi ringkasan visual interaktif dari setiap halaman modul operasional dan administratif HRIS Anda.</p>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            onClick={clearDashboardTrash}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.35)',
+              color: '#fca5a5',
+              borderRadius: '10px',
+              padding: '10px 18px',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              position: 'relative',
+              zIndex: 2,
+              flexShrink: 0
+            }}
+          >
+            <RotateCcw size={16} />
+            <span>RESET DASBOR</span>
+          </button>
+
+          <button
+            id="dashboard-filter-btn"
+            onClick={() => setShowFilterPanel(v => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              background: showFilterPanel ? 'rgba(255,98,188,0.25)' : 'rgba(255,255,255,0.12)',
+              border: '1px solid rgba(255,98,188,0.45)',
+              color: 'var(--bg-surface)',
+              borderRadius: '10px',
+              padding: '10px 18px',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              position: 'relative',
+              zIndex: 2,
+              flexShrink: 0
+            }}
+          >
+            <SlidersHorizontal size={16} />
+            <span>FILTER TAMPILAN</span>
+            {hiddenCount > 0 && (
+              <span style={{
+                background: '#ff62bc', color: '#fff', borderRadius: '50%',
+                width: '18px', height: '18px', fontSize: '0.6rem', fontWeight: 800,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                position: 'absolute', top: '-7px', right: '-7px'
+              }}>
+                {hiddenCount}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
 
       {/* ── FILTER PANEL ── */}
       {showFilterPanel && (
