@@ -154,6 +154,17 @@ export async function initializeDatabase() {
       console.log('SUCCESS: Menambahkan kolom radius ke tabel outlets.');
     } catch (_) {}
 
+    // Pastikan kunci gemini_api_key terdaftar di system_settings
+    try {
+      const [rows] = await connection.execute("SELECT * FROM system_settings WHERE `key` = 'gemini_api_key'");
+      if (!rows || rows.length === 0) {
+        await connection.execute(
+          "INSERT INTO system_settings (`key`, value, description) VALUES ('gemini_api_key', '', 'Kunci API Gemini untuk generator AI')"
+        );
+        console.log('SUCCESS: Menambahkan kunci gemini_api_key ke tabel system_settings.');
+      }
+    } catch (_) {}
+
     connection.release();
   } catch (error) {
     console.error('CRITICAL: Gagal membangun koneksi pool ke MySQL:', error.message);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Shield, Key, Lock, Check, X, AlertTriangle, Eye, EyeOff, 
-  Save, MapPin, Clock, Search, HelpCircle, Terminal, User as UserIcon, RefreshCw
+  Save, MapPin, Clock, Search, HelpCircle, Terminal, User as UserIcon, RefreshCw, Settings
 } from 'lucide-react';
 import { getRoleFromPosition, checkAccess, checkAccessMobile } from '../utils/security';
 
@@ -40,6 +40,8 @@ export default function SettingsPage({ token, API_URL, userPermissions, user }) 
   const [geofenceRadius, setGeofenceRadius] = useState('150');
   const [clockInDeadline, setClockInDeadline] = useState('08:00:00');
   const [lateDeduction, setLateDeduction] = useState('50000');
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
   const [savingParams, setSavingParams] = useState(false);
   const [paramsMessage, setParamsMessage] = useState('');
 
@@ -176,6 +178,7 @@ export default function SettingsPage({ token, API_URL, userPermissions, user }) 
           if (item.key === 'geofence_radius_meters') setGeofenceRadius(item.value);
           if (item.key === 'clock_in_deadline') setClockInDeadline(item.value);
           if (item.key === 'late_deduction_amount') setLateDeduction(item.value);
+          if (item.key === 'gemini_api_key') setGeminiApiKey(item.value);
         });
       }
     } catch (err) {
@@ -278,8 +281,8 @@ export default function SettingsPage({ token, API_URL, userPermissions, user }) 
 
     setConfirmModal({
       isOpen: true,
-      title: 'Simpan Parameter Geofencing',
-      message: 'Apakah Anda yakin ingin memperbarui parameter GPS dan jam kerja outlet?',
+      title: 'Simpan Parameter Sistem & AI',
+      message: 'Apakah Anda yakin ingin memperbarui parameter GPS, jam kerja outlet, dan kunci API Gemini?',
       confirmText: 'YA, SIMPAN',
       cancelText: 'BATAL',
       onConfirm: () => executeSaveParams()
@@ -295,7 +298,8 @@ export default function SettingsPage({ token, API_URL, userPermissions, user }) 
         { key: 'office_longitude', value: officeLongitude },
         { key: 'geofence_radius_meters', value: geofenceRadius },
         { key: 'clock_in_deadline', value: clockInDeadline },
-        { key: 'late_deduction_amount', value: lateDeduction }
+        { key: 'late_deduction_amount', value: lateDeduction },
+        { key: 'gemini_api_key', value: geminiApiKey }
       ];
 
       const res = await fetch(`${API_URL}/settings`, {
@@ -586,6 +590,10 @@ export default function SettingsPage({ token, API_URL, userPermissions, user }) 
         <button className={`settings-tab-btn ${activeTab === 'credentials' ? 'active' : ''}`} onClick={() => setActiveTab('credentials')}>
           <Key size={16} />
           <span>MANAJEMEN KREDENSIAL</span>
+        </button>
+        <button className={`settings-tab-btn ${activeTab === 'system' ? 'active' : ''}`} onClick={() => setActiveTab('system')}>
+          <Settings size={16} />
+          <span>PARAMETER SISTEM & AI</span>
         </button>
       </div>
 
@@ -881,6 +889,116 @@ export default function SettingsPage({ token, API_URL, userPermissions, user }) 
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB CONTENT 3: PARAMETER SISTEM & AI */}
+      {activeTab === 'system' && (
+        <div className="glass-card animate-fade-in" style={{ background: '#0f172a', border: '1px solid var(--text-main)', padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f1f5f9' }}>Parameter Operasional & Kunci AI Gemini</h3>
+              <p style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '2px' }}>Konfigurasi koordinat kantor utama, radius toleransi GPS absensi, jam kerja, dan integrasi API Kecerdasan Buatan.</p>
+            </div>
+          </div>
+
+          <form onSubmit={triggerSaveParams} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              <div className="input-group">
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f1f5f9' }}>LATITUDE KANTOR UTAMA:</label>
+                <input 
+                  type="text" 
+                  value={officeLatitude} 
+                  onChange={(e) => setOfficeLatitude(e.target.value)} 
+                  required 
+                  style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '10px', borderRadius: '8px' }}
+                />
+              </div>
+
+              <div className="input-group">
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f1f5f9' }}>LONGITUDE KANTOR UTAMA:</label>
+                <input 
+                  type="text" 
+                  value={officeLongitude} 
+                  onChange={(e) => setOfficeLongitude(e.target.value)} 
+                  required 
+                  style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '10px', borderRadius: '8px' }}
+                />
+              </div>
+
+              <div className="input-group">
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f1f5f9' }}>RADIUS GEOFENCE (METER):</label>
+                <input 
+                  type="number" 
+                  value={geofenceRadius} 
+                  onChange={(e) => setGeofenceRadius(e.target.value)} 
+                  required 
+                  style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '10px', borderRadius: '8px' }}
+                />
+              </div>
+
+              <div className="input-group">
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f1f5f9' }}>BATAS ABSENSI MASUK (HH:MM:SS):</label>
+                <input 
+                  type="text" 
+                  value={clockInDeadline} 
+                  onChange={(e) => setClockInDeadline(e.target.value)} 
+                  required 
+                  style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '10px', borderRadius: '8px' }}
+                />
+              </div>
+
+              <div className="input-group">
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f1f5f9' }}>DENDA KETERLAMBATAN (RP):</label>
+                <input 
+                  type="number" 
+                  value={lateDeduction} 
+                  onChange={(e) => setLateDeduction(e.target.value)} 
+                  required 
+                  style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '10px', borderRadius: '8px' }}
+                />
+              </div>
+
+              <div className="input-group" style={{ position: 'relative' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f1f5f9' }}>KUNCI API GEMINI (UNTUK GENERATE SOP):</label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input 
+                    type={showApiKey ? "text" : "password"} 
+                    value={geminiApiKey} 
+                    onChange={(e) => setGeminiApiKey(e.target.value)} 
+                    placeholder="Masukkan Kunci API Gemini..." 
+                    style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '10px 40px 10px 10px', borderRadius: '8px', width: '100%' }}
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => setShowApiKey(!showApiKey)} 
+                    style={{ position: 'absolute', right: '10px', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  >
+                    {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {paramsMessage && (
+              <div style={{ color: '#2ecc71', fontSize: '0.85rem', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Check size={16} />
+                <span>{paramsMessage}</span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button 
+                type="submit" 
+                className="btn-primary" 
+                disabled={savingParams}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', fontSize: '0.85rem' }}
+              >
+                {savingParams ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                <span>{savingParams ? 'Menyimpan...' : 'SIMPAN PERUBAHAN'}</span>
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

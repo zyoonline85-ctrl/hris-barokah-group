@@ -228,7 +228,14 @@ export async function generateAiSop(req, res) {
     });
   }
 
-  const apiKey = config.geminiApiKey || process.env.GEMINI_API_KEY;
+  let apiKey = config.geminiApiKey || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    const dbKeyRow = await dbQuery.get("SELECT value FROM system_settings WHERE `key` = 'gemini_api_key'");
+    if (dbKeyRow && dbKeyRow.value) {
+      apiKey = dbKeyRow.value;
+    }
+  }
+
   if (!apiKey) {
     return res.status(400).json({
       status: 'error',
