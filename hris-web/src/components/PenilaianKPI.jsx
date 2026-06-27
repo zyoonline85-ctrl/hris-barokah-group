@@ -723,7 +723,7 @@ export default function PenilaianKPI({ token, API_URL }) {
     { value: 11, label: 'November' },
     { value: 12, label: 'Desember' }
   ];
-  const yearsList = [2030, 2029, 2028, 2027, 2026, 2025, 2024];
+  const yearsList = Array.from({ length: 21 }, (_, i) => 2020 + i).reverse();
 
   // Data bindings for tables
   const hasil360Rows = getEvaluasi360Summary();

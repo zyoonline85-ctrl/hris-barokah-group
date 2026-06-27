@@ -464,7 +464,7 @@ export default function TrainingPage({ token, API_URL }) {
   const BULAN_LIST = ['','01','02','03','04','05','06','07','08','09','10','11','12'];
   const BULAN_LABEL = { '':'Semua Bulan','01':'Januari','02':'Februari','03':'Maret','04':'April','05':'Mei','06':'Juni','07':'Juli','08':'Agustus','09':'September','10':'Oktober','11':'November','12':'Desember' };
   const currYear = new Date().getFullYear();
-  const TAHUN_LIST = ['', ...Array.from({length: 2030 - (currYear - 2) + 1}, (_,i) => String(currYear-2+i))];
+  const TAHUN_LIST = ['', ...Array.from({ length: 21 }, (_, i) => String(2020 + i))];
 
   // ── Storage listener
   useEffect(() => {

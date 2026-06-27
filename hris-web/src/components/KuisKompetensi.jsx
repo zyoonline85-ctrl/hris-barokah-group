@@ -736,6 +736,21 @@ export default function KuisKompetensi() {
   const [editingSurveyId, setEditingSurveyId] = useState(null);
   const [selectedSurveyForResult, setSelectedSurveyForResult] = useState(null);
 
+  // ── Survey State Baru (form manual admin)
+  const [surveyFormStartDate, setSurveyFormStartDate] = useState('');
+  const [surveyFormEndDate, setSurveyFormEndDate] = useState('');
+  const [surveyFormOutlets, setSurveyFormOutlets] = useState([]);
+  const [surveyFormQuestionDetails, setSurveyFormQuestionDetails] = useState(
+    Array(10).fill(null).map((_, i) => ({ id: `q${i}`, text: '', options: { a: '', b: '', c: '', d: '' } }))
+  );
+  const [showSurveyAddPreview, setShowSurveyAddPreview] = useState(false);
+  const [showInputResponseModal, setShowInputResponseModal] = useState(false);
+  const [responseTargetSurveyId, setResponseTargetSurveyId] = useState('');
+  const [responseFormEmpId, setResponseFormEmpId] = useState('');
+  const [responseFormAnswers, setResponseFormAnswers] = useState({});
+  const [showSurveyPreviewModal, setShowSurveyPreviewModal] = useState(false);
+  const [surveyPreviewData, setSurveyPreviewData] = useState(null);
+
 
   // ── Derived
   const divisiOptions = (() => {
@@ -841,72 +856,111 @@ export default function KuisKompetensi() {
   };
 
   const getSurveyStats = (survey) => {
-    const srvResps = surveyResponses.filter(r => r.survey_id === survey.id);
+    const srvResps = surveyResponses.filter(r => (r.surveyId || r.survey_id) === survey.id);
     const totalResponses = srvResps.length;
-    const stats = survey.questions.map((qText, qIdx) => {
-      const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    const questions = survey.questions || [];
+    const stats = questions.map((q, qIdx) => {
+      const counts = { a: 0, b: 0, c: 0, d: 0 };
       srvResps.forEach(r => {
-        const score = r.answers[qIdx] || 3;
-        counts[score]++;
+        const ans = r.answers?.[`q${qIdx}`] || r.answers?.[qIdx];
+        if (ans && counts.hasOwnProperty(ans)) counts[ans]++;
       });
-      const avg = totalResponses > 0 
-        ? (srvResps.reduce((sum, r) => sum + (r.answers[qIdx] || 3), 0) / totalResponses).toFixed(1)
-        : '—';
-      return { qText, counts, avg };
+      const pct = {};
+      Object.keys(counts).forEach(k => {
+        pct[k] = totalResponses > 0 ? Math.round((counts[k] / totalResponses) * 100) : 0;
+      });
+      return { qText: q.text || q, options: q.options || {}, counts, pct };
     });
-    return { stats, totalResponses };
+    return { stats, totalResponses, responses: srvResps };
   };
 
   // ── Survey Handlers
   const handleOpenTambahSurvey = () => {
     setEditingSurveyId(null);
     setSurveyFormTitle('');
-    setSurveyFormDivisi('Semua');
-    setSurveyFormQuestions(Array(10).fill(''));
+    setSurveyFormStartDate('');
+    setSurveyFormEndDate('');
+    setSurveyFormOutlets([]);
+    setSurveyFormQuestionDetails(Array(10).fill(null).map((_, i) => ({ id: `q${i}`, text: '', options: { a: '', b: '', c: '', d: '' } })));
     setShowTambahSurveyModal(true);
   };
 
   const handleOpenEditSurvey = (srv) => {
     setEditingSurveyId(srv.id);
-    setSurveyFormTitle(srv.title);
-    setSurveyFormDivisi(srv.target_divisi);
-    setSurveyFormQuestions([...srv.questions]);
+    setSurveyFormTitle(srv.title || '');
+    setSurveyFormStartDate(srv.startDate || '');
+    setSurveyFormEndDate(srv.endDate || '');
+    setSurveyFormOutlets(srv.outlets || []);
+    const qs = (srv.questions || []).map((q, i) => ({
+      id: q.id || `q${i}`,
+      text: q.text || (typeof q === 'string' ? q : ''),
+      options: q.options || { a: '', b: '', c: '', d: '' }
+    }));
+    // Pad to 10
+    while (qs.length < 10) qs.push({ id: `q${qs.length}`, text: '', options: { a: '', b: '', c: '', d: '' } });
+    setSurveyFormQuestionDetails(qs);
     setShowTambahSurveyModal(true);
   };
 
+  // Validasi → tampilkan preview sebelum simpan
   const handleSaveSurvey = () => {
-    if (!surveyFormTitle.trim()) {
-      alert('Judul survey harus diisi!');
-      return;
-    }
-    const emptyQ = surveyFormQuestions.some(q => !q.trim());
-    if (emptyQ) {
-      alert('Harap isi semua 10 pertanyaan survey!');
-      return;
-    }
+    if (!surveyFormTitle.trim()) { alert('Judul survey harus diisi!'); return; }
+    if (!surveyFormStartDate || !surveyFormEndDate) { alert('Tanggal mulai dan akhir wajib diisi!'); return; }
+    const emptyQ = surveyFormQuestionDetails.some(q => !q.text.trim() || !q.options.a.trim() || !q.options.b.trim() || !q.options.c.trim() || !q.options.d.trim());
+    if (emptyQ) { alert('Harap isi semua 10 pertanyaan beserta 4 pilihan (A, B, C, D)!'); return; }
+    setShowSurveyAddPreview(true);
+  };
 
+  // Konfirmasi simpan setelah pratinjau
+  const handleConfirmSaveSurvey = () => {
+    const surveyObj = {
+      id: editingSurveyId || uid(),
+      title: surveyFormTitle.trim(),
+      startDate: surveyFormStartDate,
+      endDate: surveyFormEndDate,
+      outlets: surveyFormOutlets,
+      questions: surveyFormQuestionDetails,
+      status: 'aktif',
+      created_at: new Date().toISOString()
+    };
     if (editingSurveyId) {
-      const updated = surveys.map(s => s.id === editingSurveyId ? {
-        ...s,
-        title: surveyFormTitle,
-        target_divisi: surveyFormDivisi,
-        questions: [...surveyFormQuestions]
-      } : s);
-      saveSurveys(updated);
-      alert('Survey berhasil diperbarui!');
+      saveSurveys(surveys.map(s => s.id === editingSurveyId ? surveyObj : s));
     } else {
-      const newSrv = {
-        id: uid(),
-        title: surveyFormTitle,
-        target_divisi: surveyFormDivisi,
-        questions: [...surveyFormQuestions],
-        status: 'draft',
-        created_at: new Date().toISOString()
-      };
-      saveSurveys([...surveys, newSrv]);
-      alert('Survey baru berhasil dibuat (draft)!');
+      saveSurveys([...surveys, surveyObj]);
     }
+    setShowSurveyAddPreview(false);
     setShowTambahSurveyModal(false);
+    alert(editingSurveyId ? 'Survey berhasil diperbarui!' : 'Survey baru berhasil dibuat!');
+  };
+
+  // Buka form input jawaban manual
+  const handleAddResponse = (surveyId) => {
+    setResponseTargetSurveyId(surveyId);
+    setResponseFormEmpId('');
+    setResponseFormAnswers({});
+    setShowInputResponseModal(true);
+  };
+
+  // Simpan jawaban
+  const handleSaveResponse = () => {
+    if (!responseFormEmpId) { alert('Pilih karyawan terlebih dahulu!'); return; }
+    const survey = surveys.find(s => s.id === responseTargetSurveyId);
+    if (!survey) return;
+    const unanswered = (survey.questions || []).filter((_, i) => !responseFormAnswers[`q${i}`]);
+    if (unanswered.length > 0) { alert(`Harap jawab semua ${(survey.questions || []).length} pertanyaan!`); return; }
+    const emp = activeEmployees.find(e => String(e.id) === String(responseFormEmpId));
+    const newResp = {
+      id: uid(),
+      surveyId: responseTargetSurveyId,
+      employeeId: responseFormEmpId,
+      employeeName: emp?.full_name || emp?.nama || '',
+      outlet: emp?.outlet || '',
+      answers: { ...responseFormAnswers },
+      submittedAt: new Date().toISOString()
+    };
+    saveSurveyResponses([...surveyResponses, newResp]);
+    setShowInputResponseModal(false);
+    alert('Jawaban berhasil disimpan!');
   };
 
   const handleDeleteSurvey = (srvId) => {
@@ -1608,7 +1662,7 @@ export default function KuisKompetensi() {
         {activeTab === 'survey' && (
           <div className="kuis-card animate-fade-in">
             {selectedSurveyForResult ? (() => {
-              const { stats, totalResponses } = getSurveyStats(selectedSurveyForResult);
+              const { stats, totalResponses, responses } = getSurveyStats(selectedSurveyForResult);
               return (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -1616,10 +1670,18 @@ export default function KuisKompetensi() {
                       <button onClick={() => setSelectedSurveyForResult(null)} style={{ background: 'transparent', border: 'none', color: C.cyan, cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '5px', padding: 0, marginBottom: '6px' }}>
                         ← Kembali ke Daftar Survey
                       </button>
-                      <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: C.text }}>Analisis Distribusi Jawaban Survey</h2>
+                      <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: C.text }}>Analisis Hasil Survey Karyawan</h2>
                       <p style={{ color: C.muted, fontSize: '0.82rem', marginTop: '2px' }}>
-                        {selectedSurveyForResult.title} (Target: {selectedSurveyForResult.target_divisi} · {totalResponses} Responden)
+                        {selectedSurveyForResult.title} (Periode: {selectedSurveyForResult.startDate} s/d {selectedSurveyForResult.endDate} · {totalResponses} Responden)
                       </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <Btn variant="primary" onClick={() => handleAddResponse(selectedSurveyForResult.id)}>
+                        <Plus size={16} /> Input Jawaban Manual
+                      </Btn>
+                      <Btn variant="secondary" onClick={() => setSelectedSurveyForResult(null)}>
+                        Tutup
+                      </Btn>
                     </div>
                   </div>
 
@@ -1627,36 +1689,82 @@ export default function KuisKompetensi() {
                     <div style={{ textAlign: 'center', padding: '60px 20px', background: C.surface, borderRadius: '16px', border: `1px dashed ${C.border}` }}>
                       <Inbox size={40} color={C.muted} style={{ marginBottom: '12px' }} />
                       <p style={{ color: C.text, fontWeight: 700, marginBottom: '4px' }}>Belum Ada Respon</p>
-                      <p style={{ color: C.muted, fontSize: '0.82rem' }}>Survey ini belum diisi oleh satu pun karyawan.</p>
+                      <p style={{ color: C.muted, fontSize: '0.82rem' }}>Survey ini belum memiliki respon jawaban.</p>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      {stats.map((item, idx) => (
-                        <div key={idx} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: '12px', padding: '18px 20px' }}>
-                          <p style={{ fontWeight: 700, color: C.text, fontSize: '0.88rem', marginBottom: '14px' }}>
-                            {idx + 1}. {item.qText}
-                          </p>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {[5, 4, 3, 2, 1].map(score => {
-                              const count = item.counts[score] || 0;
-                              const pct = totalResponses > 0 ? Math.round((count / totalResponses) * 100) : 0;
-                              return (
-                                <div key={score} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.8rem' }}>
-                                  <span style={{ width: '60px', color: C.muted }}>Skor {score} ⭐</span>
-                                  <div style={{ flex: 1, height: '8px', background: C.bg, borderRadius: '4px', overflow: 'hidden' }}>
-                                    <div style={{ width: `${pct}%`, height: '100%', background: score >= 4 ? '#2ecc71' : score === 3 ? '#f1c40f' : '#e74c3c', borderRadius: '4px' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      {/* Bagan Persentase per Soal */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
+                        {stats.map((item, idx) => (
+                          <div key={idx} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: '12px', padding: '18px 20px' }}>
+                            <p style={{ fontWeight: 700, color: C.text, fontSize: '0.88rem', marginBottom: '14px' }}>
+                              {idx + 1}. {item.qText}
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                              {['a', 'b', 'c', 'd'].map(optKey => {
+                                const optVal = item.options[optKey] || '';
+                                const pct = item.pct[optKey] || 0;
+                                const count = item.counts[optKey] || 0;
+                                const colors = { a: C.cyan, b: C.success, c: C.warn, d: C.danger };
+                                return (
+                                  <div key={optKey} style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.8rem' }}>
+                                    <span style={{ width: '20px', color: colors[optKey], fontWeight: 800, textTransform: 'uppercase' }}>{optKey}</span>
+                                    <span style={{ flex: '0 0 200px', color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={optVal}>{optVal}</span>
+                                    <div style={{ flex: 1, height: '8px', background: C.bg, borderRadius: '4px', overflow: 'hidden' }}>
+                                      <div style={{ width: `${pct}%`, height: '100%', background: colors[optKey], borderRadius: '4px' }} />
+                                    </div>
+                                    <span style={{ width: '85px', color: C.text, textAlign: 'right', fontWeight: 600 }}>{pct}% ({count} org)</span>
                                   </div>
-                                  <span style={{ width: '85px', color: C.text, textAlign: 'right', fontWeight: 600 }}>{pct}% ({count} org)</span>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
-                          <div style={{ marginTop: '12px', borderTop: `1px dashed ${C.border}`, paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: C.muted }}>
-                            <span>Total Respon: {totalResponses}</span>
-                            <span>Rata-rata Skor: <strong style={{ color: C.cyan }}>{item.avg} / 5.0</strong></span>
-                          </div>
+                        ))}
+                      </div>
+
+                      {/* Tabel Penjabaran Kesimpulan */}
+                      <div style={{ background: C.surface, borderRadius: '14px', padding: '20px', border: `1px solid ${C.border}` }}>
+                        <h3 style={{ fontSize: '1rem', fontWeight: 700, color: C.text, marginBottom: '14px' }}>📊 Tabel Penjabaran Kesimpulan (Responden)</h3>
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                            <thead>
+                              <tr style={{ background: C.bg }}>
+                                <th style={{ padding: '10px 12px', color: C.cyan, fontWeight: 700, textAlign: 'left' }}>No</th>
+                                <th style={{ padding: '10px 12px', color: C.cyan, fontWeight: 700, textAlign: 'left' }}>Nama Karyawan</th>
+                                <th style={{ padding: '10px 12px', color: C.cyan, fontWeight: 700, textAlign: 'left' }}>Outlet</th>
+                                <th style={{ padding: '10px 12px', color: C.cyan, fontWeight: 700, textAlign: 'left' }}>Tanggal Mengisi</th>
+                                <th style={{ padding: '10px 12px', color: C.cyan, fontWeight: 700, textAlign: 'center' }}>Jawaban (Soal 1-10)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {responses.map((resp, i) => (
+                                <tr key={resp.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                                  <td style={{ padding: '10px 12px', color: C.text }}>{i + 1}</td>
+                                  <td style={{ padding: '10px 12px', color: C.text, fontWeight: 600 }}>{resp.employeeName}</td>
+                                  <td style={{ padding: '10px 12px', color: C.muted }}>{resp.outlet || '-'}</td>
+                                  <td style={{ padding: '10px 12px', color: C.muted, fontSize: '0.78rem' }}>
+                                    {new Date(resp.submittedAt || resp.submitted_at).toLocaleString('id-ID')}
+                                  </td>
+                                  <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                      {Array.from({ length: 10 }).map((_, qIdx) => {
+                                        const ans = (resp.answers || {})[`q${qIdx}`] || (resp.answers || {})[qIdx] || '-';
+                                        return (
+                                          <span key={qIdx} style={{
+                                            display: 'inline-block', width: '22px', height: '22px', lineHeight: '20px',
+                                            borderRadius: '4px', background: C.bg, border: `1px solid ${C.border}`,
+                                            fontSize: '0.72rem', fontWeight: 700, color: ans !== '-' ? C.cyan : C.muted, textTransform: 'uppercase'
+                                          }} title={`Soal ${qIdx + 1}: ${ans}`}>{ans}</span>
+                                        );
+                                      })}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
-                      ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1667,7 +1775,7 @@ export default function KuisKompetensi() {
                   <div>
                     <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: C.text }}>Kelola & Buat Survey Karyawan</h2>
                     <p style={{ color: C.muted, fontSize: '0.82rem', marginTop: '2px' }}>
-                      Kumpulkan masukan dari karyawan Anda menggunakan survey 10 pertanyaan skala 1-5
+                      Kumpulkan masukan dari karyawan menggunakan survey 10 pertanyaan pilihan ganda manual.
                     </p>
                   </div>
                   <Btn variant="primary" onClick={handleOpenTambahSurvey}>
@@ -1686,7 +1794,7 @@ export default function KuisKompetensi() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                       <thead>
                         <tr style={{ background: C.surface }}>
-                          {['Judul Survey', 'Target Divisi', 'Jumlah Respon', 'Tanggal Dibuat', 'Status', 'Aksi'].map(h => (
+                          {['Judul Survey (Klik untuk Preview Soal)', 'Tanggal Mulai', 'Tanggal Akhir', 'Target Cabang', 'Responden', 'Aksi'].map(h => (
                             <th key={h} style={{ padding: '13px 16px', color: C.cyan, fontWeight: 700, textAlign: 'left', borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>{h}</th>
                           ))}
                         </tr>
@@ -1695,29 +1803,27 @@ export default function KuisKompetensi() {
                         {surveys.map((srv) => (
                           <tr key={srv.id} className="kuis-row" style={{ borderBottom: `1px solid ${C.border}`, transition: 'background 0.15s' }}>
                             <td style={{ padding: '14px 16px', color: C.text, fontWeight: 600 }}>
-                              {srv.title}
+                              <button onClick={() => { setSurveyPreviewData(srv); setShowSurveyPreviewModal(true); }} style={{ background: 'transparent', border: 'none', color: C.text, padding: 0, fontWeight: 700, cursor: 'pointer', textAlign: 'left', hover: { color: C.cyan } }}>
+                                📋 {srv.title}
+                              </button>
                             </td>
                             <td style={{ padding: '14px 16px', color: C.muted }}>
-                              {srv.target_divisi}
+                              {srv.startDate || '-'}
+                            </td>
+                            <td style={{ padding: '14px 16px', color: C.muted }}>
+                              {srv.endDate || '-'}
+                            </td>
+                            <td style={{ padding: '14px 16px', color: C.muted }}>
+                              {srv.outlets && srv.outlets.length > 0 ? srv.outlets.join(', ') : 'Semua Outlet'}
                             </td>
                             <td style={{ padding: '14px 16px', color: C.text }}>
                               <Badge label={`${getResponsesCount(srv.id)} Respon`} color={C.cyan} bg="rgba(0,173,181,0.08)" />
                             </td>
-                            <td style={{ padding: '14px 16px', color: C.muted, fontSize: '0.78rem' }}>
-                              {new Date(srv.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            </td>
-                            <td style={{ padding: '14px 16px' }}>
-                              {srv.status === 'terkirim'
-                                ? <Badge label="🚀 Terkirim" color={C.success} bg="rgba(78,205,196,0.12)" />
-                                : <Badge label="📝 Draft" color={C.warn} bg="rgba(245,166,35,0.12)" />}
-                            </td>
                             <td style={{ padding: '14px 16px' }}>
                               <div style={{ display: 'flex', gap: '8px' }}>
-                                {srv.status !== 'terkirim' && (
-                                  <button title="Kirim ke Karyawan" onClick={() => handleSendSurvey(srv)} style={{ background: C.cyanDim, border: `1px solid ${C.cyanBorder}`, borderRadius: '8px', padding: '7px 12px', color: C.cyan, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <Send size={13} /> Kirim
-                                  </button>
-                                )}
+                                <button title="Input Jawaban Manual" onClick={() => handleAddResponse(srv.id)} style={{ background: C.cyanDim, border: `1px solid ${C.cyanBorder}`, borderRadius: '8px', padding: '7px 12px', color: C.cyan, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                  <Plus size={13} /> Jawaban
+                                </button>
                                 <button title="Lihat Hasil Survey" onClick={() => setSelectedSurveyForResult(srv)} style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '8px', padding: '7px 12px', color: C.success, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
                                   <BarChart2 size={13} /> Hasil
                                 </button>
@@ -1745,70 +1851,93 @@ export default function KuisKompetensi() {
 
       {/* ── TAMBAH SURVEY MODAL ── */}
       {showTambahSurveyModal && (
-        <div className="modal-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2, 4, 10, 0.8)', zIndex: 1000 }}>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: '16px', padding: '24px', maxWidth: '640px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: C.text }}>
-                {editingSurveyId ? '📝 Edit Survey Karyawan' : '✨ Buat Survey Baru'}
+        <div className="modal-backdrop" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2, 4, 10, 0.85)', zIndex: 9000, overflowY: 'auto', padding: '20px 0' }}>
+          <div style={{ background: C.surface, border: `2px solid #DFB15B`, borderRadius: '18px', padding: '24px', maxWidth: '860px', width: '95%', marginTop: '20px', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', borderBottom: `1px solid ${C.border}`, paddingBottom: '12px' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#DFB15B' }}>
+                {editingSurveyId ? '📝 Edit Form Survey Karyawan' : '✨ Buat Form Survey Baru'}
               </h2>
               <button onClick={() => setShowTambahSurveyModal(false)} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer' }}><X size={20} /></button>
             </div>
 
-            {/* Live Survey Preview */}
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(223, 177, 91, 0.15), rgba(16, 23, 38, 0.8))',
-              border: `1px solid ${C.border}`,
-              borderRadius: '12px',
-              padding: '16px',
-              marginBottom: '18px',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '4px'
-            }}>
-              <div style={{ fontSize: '0.62rem', fontWeight: 800, color: '#DFB15B', textTransform: 'uppercase', letterSpacing: '1px' }}>PREVIEW SURVEY</div>
-              <div style={{ fontSize: '1rem', fontWeight: 800, color: '#fff' }}>📋 {surveyFormTitle || 'JUDUL SURVEY'}</div>
-              <div style={{ display: 'flex', gap: '12px', fontSize: '0.72rem', color: C.muted, marginTop: '4px' }}>
-                <span>Target: <strong>{surveyFormDivisi || 'Semua Divisi'}</strong></span>
-                <span>•</span>
-                <span>Pertanyaan: <strong>{surveyFormQuestions.filter(q => q.trim().length > 0).length} Pertanyaan terisi</strong></span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Info Detail */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: C.muted, marginBottom: '6px', fontWeight: 600 }}>Judul Survey</label>
+                  <input type="text" className="input-field" value={surveyFormTitle} onChange={e => setSurveyFormTitle(e.target.value)} placeholder="Contoh: Survey Evaluasi Kinerja & Hubungan Kerja" style={{ width: '100%', padding: '10px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: '8px', color: C.text }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: C.muted, marginBottom: '6px', fontWeight: 600 }}>Tanggal Mulai</label>
+                  <input type="date" min="2020-01-01" max="2040-12-31" className="input-field" value={surveyFormStartDate} onChange={e => setSurveyFormStartDate(e.target.value)} style={{ width: '100%', padding: '10px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: '8px', color: C.text }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: C.muted, marginBottom: '6px', fontWeight: 600 }}>Tanggal Akhir</label>
+                  <input type="date" min="2020-01-01" max="2040-12-31" className="input-field" value={surveyFormEndDate} onChange={e => setSurveyFormEndDate(e.target.value)} style={{ width: '100%', padding: '10px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: '8px', color: C.text }} />
+                </div>
               </div>
-            </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Target Cabang */}
               <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: C.muted, marginBottom: '6px', fontWeight: 600 }}>Judul Survey</label>
-                <input type="text" className="input-field" value={surveyFormTitle} onChange={e => setSurveyFormTitle(e.target.value)} placeholder="Contoh: Survey Kepuasan Kerja & Evaluasi Fasilitas" style={{ width: '100%', padding: '10px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: '8px', color: C.text }} />
+                <label style={{ display: 'block', fontSize: '0.8rem', color: C.muted, marginBottom: '6px', fontWeight: 600 }}>Target Outlet Cabang (Kosongkan jika semua outlet)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', padding: '10px', background: C.bg, borderRadius: '8px', border: `1px solid ${C.border}` }}>
+                  {allOutlets.map(o => {
+                    const isChecked = surveyFormOutlets.includes(o);
+                    return (
+                      <label key={o} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: C.text, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={isChecked} onChange={() => {
+                          if (isChecked) {
+                            setSurveyFormOutlets(surveyFormOutlets.filter(x => x !== o));
+                          } else {
+                            setSurveyFormOutlets([...surveyFormOutlets, o]);
+                          }
+                        }} />
+                        {o}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
+
+              {/* 10 Soal Input */}
               <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: C.muted, marginBottom: '6px', fontWeight: 600 }}>Target Divisi</label>
-                <select className="input-field" value={surveyFormDivisi} onChange={e => setSurveyFormDivisi(e.target.value)} style={{ width: '100%', padding: '10px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: '8px', color: C.text }}>
-                  <option value="Semua">Semua Divisi / Jabatan</option>
-                  {divisiOptions.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: C.muted, marginBottom: '8px', fontWeight: 600 }}>Daftar 10 Pertanyaan (Penilaian Skala 1-5)</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {surveyFormQuestions.map((q, idx) => (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontSize: '0.8rem', color: C.muted, width: '24px' }}>#{idx + 1}</span>
-                      <input type="text" className="input-field" value={q} onChange={e => {
-                        const newQs = [...surveyFormQuestions];
-                        newQs[idx] = e.target.value;
-                        setSurveyFormQuestions(newQs);
-                      }} placeholder={`Pertanyaan ${idx + 1}...`} style={{ flex: 1, padding: '8px 12px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: '8px', color: C.text, fontSize: '0.82rem' }} />
+                <label style={{ display: 'block', fontSize: '0.85rem', color: C.cyan, marginBottom: '10px', fontWeight: 700 }}>Daftar 10 Pertanyaan & Pilihan Jawaban</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '6px' }}>
+                  {surveyFormQuestionDetails.map((q, idx) => (
+                    <div key={q.id} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.82rem', fontWeight: 800, color: C.cyan }}>Soal #{idx + 1}</span>
+                        <input type="text" className="input-field" value={q.text} onChange={e => {
+                          const newQ = [...surveyFormQuestionDetails];
+                          newQ[idx].text = e.target.value;
+                          setSurveyFormQuestionDetails(newQ);
+                        }} placeholder="Masukkan teks pertanyaan di sini..." style={{ flex: 1, padding: '8px 12px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '6px', color: C.text, fontSize: '0.82rem' }} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', paddingLeft: '24px' }}>
+                        {['a', 'b', 'c', 'd'].map(key => (
+                          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '0.78rem', color: C.muted, fontWeight: 700, textTransform: 'uppercase' }}>{key}</span>
+                            <input type="text" className="input-field" value={q.options[key]} onChange={e => {
+                              const newQ = [...surveyFormQuestionDetails];
+                              newQ[idx].options[key] = e.target.value;
+                              setSurveyFormQuestionDetails(newQ);
+                            }} placeholder={`Pilihan ${key.toUpperCase()}...`} style={{ flex: 1, padding: '6px 10px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '6px', color: C.text, fontSize: '0.78rem' }} />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-                <button onClick={handleSaveSurvey} className="btn-primary" style={{ flex: 1, padding: '12px', background: C.cyan, color: C.bg, border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}>
-                  Simpan Survey
-                </button>
-                <button onClick={() => setShowTambahSurveyModal(false)} className="btn-secondary" style={{ flex: 1, padding: '12px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: '8px', color: C.text, cursor: 'pointer' }}>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '12px', marginTop: '12px', borderTop: `1px solid ${C.border}`, paddingTop: '14px' }}>
+                <Btn variant="primary" onClick={handleSaveSurvey} style={{ flex: 1, height: '42px', justifyContent: 'center' }}>
+                  ⚙️ Simpan & Kirim
+                </Btn>
+                <Btn variant="secondary" onClick={() => setShowTambahSurveyModal(false)} style={{ flex: 1, height: '42px', justifyContent: 'center' }}>
                   Batal
-                </button>
+                </Btn>
               </div>
             </div>
           </div>
@@ -1853,6 +1982,151 @@ export default function KuisKompetensi() {
           // Modal stays open to show result
         }}
       />
+
+      {/* ── MODAL PREVIEW SEBELUM SIMPAN (showSurveyAddPreview) ── */}
+      {showSurveyAddPreview && (
+        <div className="modal-backdrop" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2, 4, 10, 0.9)', zIndex: 9500, overflowY: 'auto', padding: '20px 0' }}>
+          <div style={{ background: C.surface, border: `2px solid ${C.success}`, borderRadius: '18px', padding: '24px', maxWidth: '780px', width: '95%', marginTop: '20px', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: `1px solid ${C.border}`, paddingBottom: '10px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: C.success }}>📋 Konfirmasi & Review Preview Survey</h3>
+              <button onClick={() => setShowSurveyAddPreview(false)} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer' }}><X size={18} /></button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '450px', overflowY: 'auto', paddingRight: '8px' }}>
+              <div style={{ background: C.bg, padding: '14px', borderRadius: '10px', border: `1px solid ${C.border}`, fontSize: '0.85rem' }}>
+                <div><strong>Judul Survey:</strong> {surveyFormTitle}</div>
+                <div style={{ marginTop: '6px' }}><strong>Periode:</strong> {surveyFormStartDate} s/d {surveyFormEndDate}</div>
+                <div style={{ marginTop: '6px' }}><strong>Target Cabang:</strong> {surveyFormOutlets.length > 0 ? surveyFormOutlets.join(', ') : 'Semua Outlet'}</div>
+              </div>
+
+              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: C.text }}>Daftar Soal & Pilihan:</div>
+              {surveyFormQuestionDetails.map((q, idx) => (
+                <div key={q.id} style={{ padding: '10px 14px', background: C.bg, borderRadius: '8px', border: `1px solid ${C.border}` }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.82rem', color: C.cyan, marginBottom: '6px' }}>{idx + 1}. {q.text}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.78rem', color: C.text, paddingLeft: '14px' }}>
+                    <div><span style={{ color: C.muted, fontWeight: 700 }}>A.</span> {q.options.a}</div>
+                    <div><span style={{ color: C.muted, fontWeight: 700 }}>B.</span> {q.options.b}</div>
+                    <div><span style={{ color: C.muted, fontWeight: 700 }}>C.</span> {q.options.c}</div>
+                    <div><span style={{ color: C.muted, fontWeight: 700 }}>D.</span> {q.options.d}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '16px', borderTop: `1px solid ${C.border}`, paddingTop: '14px' }}>
+              <Btn variant="primary" onClick={handleConfirmSaveSurvey} style={{ flex: 1, height: '40px', justifyContent: 'center' }}>
+                Ya, OK & Simpan
+              </Btn>
+              <Btn variant="secondary" onClick={() => setShowSurveyAddPreview(false)} style={{ flex: 1, height: '40px', justifyContent: 'center' }}>
+                Edit Lagi
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL INPUT JAWABAN MANUAL (showInputResponseModal) ── */}
+      {showInputResponseModal && (() => {
+        const targetSurvey = surveys.find(s => s.id === responseTargetSurveyId);
+        if (!targetSurvey) return null;
+        
+        // Filter karyawan yang sesuai target outlet survey
+        const matchingEmployees = activeEmployees.filter(e => {
+          if (targetSurvey.outlets && targetSurvey.outlets.length > 0) {
+            return targetSurvey.outlets.some(o => (e.outlet || '').toUpperCase().trim() === o.toUpperCase().trim());
+          }
+          return true;
+        });
+
+        return (
+          <div className="modal-backdrop" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2, 4, 10, 0.85)', zIndex: 9000, overflowY: 'auto', padding: '20px 0' }}>
+            <div style={{ background: C.surface, border: `2px solid ${C.cyan}`, borderRadius: '18px', padding: '24px', maxWidth: '780px', width: '95%', marginTop: '20px', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: `1px solid ${C.border}`, paddingBottom: '10px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: C.cyan }}>📝 Input Jawaban Survey Manual</h3>
+                <button onClick={() => setShowInputResponseModal(false)} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer' }}><X size={18} /></button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: C.muted, marginBottom: '6px', fontWeight: 600 }}>Pilih Karyawan Responden</label>
+                  <select className="input-field" value={responseFormEmpId} onChange={e => setResponseFormEmpId(e.target.value)} style={{ width: '100%', padding: '10px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: '8px', color: C.text }}>
+                    <option value="">-- Pilih Karyawan --</option>
+                    {matchingEmployees.map(e => (
+                      <option key={e.id} value={e.id}>{e.full_name || e.nama} ({e.outlet} - {e.jabatan || e.position})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '350px', overflowY: 'auto', paddingRight: '6px' }}>
+                  {(targetSurvey.questions || []).map((q, idx) => (
+                    <div key={q.id || idx} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: '10px', padding: '12px' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.82rem', color: C.text, marginBottom: '8px' }}>{idx + 1}. {q.text || q}</div>
+                      
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', paddingLeft: '12px' }}>
+                        {['a', 'b', 'c', 'd'].map(key => {
+                          const isChecked = responseFormAnswers[`q${idx}`] === key;
+                          const optText = q.options ? q.options[key] : '';
+                          return (
+                            <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: C.text, cursor: 'pointer' }}>
+                              <input type="radio" name={`q_${idx}`} checked={isChecked} onChange={() => {
+                                setResponseFormAnswers({ ...responseFormAnswers, [`q${idx}`]: key });
+                              }} />
+                              <span style={{ color: C.cyan, fontWeight: 700, textTransform: 'uppercase' }}>{key}.</span> {optText || `Pilihan ${key.toUpperCase()}`}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', marginTop: '10px', borderTop: `1px solid ${C.border}`, paddingTop: '12px' }}>
+                  <Btn variant="primary" onClick={handleSaveResponse} style={{ flex: 1, height: '40px', justifyContent: 'center' }}>
+                    Simpan Jawaban
+                  </Btn>
+                  <Btn variant="secondary" onClick={() => setShowInputResponseModal(false)} style={{ flex: 1, height: '40px', justifyContent: 'center' }}>
+                    Batal
+                  </Btn>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── MODAL PREVIEW SOAL SURVEY (showSurveyPreviewModal) ── */}
+      {showSurveyPreviewModal && surveyPreviewData && (
+        <div className="modal-backdrop" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2, 4, 10, 0.85)', zIndex: 9000, overflowY: 'auto', padding: '20px 0' }}>
+          <div style={{ background: C.surface, border: `2px solid ${C.cyan}`, borderRadius: '18px', padding: '24px', maxWidth: '780px', width: '95%', marginTop: '20px', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: `1px solid ${C.border}`, paddingBottom: '10px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: C.cyan }}>📋 Soal & Pilihan: {surveyPreviewData.title}</h3>
+              <button onClick={() => { setShowSurveyPreviewModal(false); setSurveyPreviewData(null); }} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer' }}><X size={18} /></button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '450px', overflowY: 'auto', paddingRight: '8px' }}>
+              {(surveyPreviewData.questions || []).map((q, idx) => (
+                <div key={q.id || idx} style={{ padding: '10px 14px', background: C.bg, borderRadius: '8px', border: `1px solid ${C.border}` }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.82rem', color: C.cyan, marginBottom: '6px' }}>{idx + 1}. {q.text || q}</div>
+                  {q.options && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.78rem', color: C.text, paddingLeft: '14px' }}>
+                      <div><span style={{ color: C.muted, fontWeight: 700 }}>A.</span> {q.options.a}</div>
+                      <div><span style={{ color: C.muted, fontWeight: 700 }}>B.</span> {q.options.b}</div>
+                      <div><span style={{ color: C.muted, fontWeight: 700 }}>C.</span> {q.options.c}</div>
+                      <div><span style={{ color: C.muted, fontWeight: 700 }}>D.</span> {q.options.d}</div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', marginTop: '16px', borderTop: `1px solid ${C.border}`, paddingTop: '14px' }}>
+              <Btn variant="secondary" onClick={() => { setShowSurveyPreviewModal(false); setSurveyPreviewData(null); }} style={{ flex: 1, height: '40px', justifyContent: 'center' }}>
+                Tutup
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ═══ REAL-TIME DISPATCH EVENT OVERLAY ═══ */}
       {isSendingEvent && (
         <div style={{

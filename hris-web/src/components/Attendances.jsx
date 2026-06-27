@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Calendar, MapPin, Users, CheckCircle, AlertCircle, Clock, XCircle, Edit2, Trash2, X, Filter, Plus, Info, Store, Loader2, ChevronDown, ChevronRight, FileText, BarChart2, TrendingDown, AlertTriangle } from 'lucide-react';
+import { Search, Calendar, MapPin, Users, CheckCircle, AlertCircle, Clock, XCircle, Edit2, Trash2, X, Filter, Plus, Info, Store, Loader2, ChevronDown, ChevronRight, FileText, BarChart2, TrendingDown, AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { getLiveOutletList } from '../utils/outletUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -17,7 +17,7 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
 
   const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
   const currentYear = new Date().getFullYear();
-  const TAHUN = Array.from({ length: 2030 - (currentYear - 2) + 1 }, (_, i) => currentYear - 2 + i);
+  const TAHUN = Array.from({ length: 21 }, (_, i) => 2020 + i);
 
   // ─── DATA STATES ───────────────────────────────────────────────────────────
   const [employees, setEmployees]             = useState([]);
@@ -33,11 +33,12 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
 
   // ─── PAPAN INPUT KEHADIRAN (Tab Kehadiran Karyawan) ─────────────────────────
   const [showInputBoard, setShowInputBoard] = useState(false);
+  const [inputStep, setInputStep] = useState(1); // 1 = Input, 2 = Preview
   const [inputBoardDate, setInputBoardDate] = useState(new Date().toISOString().split('T')[0]);
   const [inputBoardOutlet, setInputBoardOutlet] = useState('');
   const [inputBoardRows, setInputBoardRows] = useState([]);
-  const [showAttPreview, setShowAttPreview] = useState(false);
-  const [attFilterOutlet, setAttFilterOutlet] = useState('');
+  const [attFilterOutlets, setAttFilterOutlets] = useState([]);
+  const [showAttOutletDropdown, setShowAttOutletDropdown] = useState(false);
   const [attFilterStatus, setAttFilterStatus] = useState('');
   const [attFilterMonth, setAttFilterMonth] = useState(new Date().getMonth() + 1);
   const [attFilterYear, setAttFilterYear] = useState(new Date().getFullYear());
@@ -72,6 +73,7 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
   const [yearEval, setYearEval]               = useState(new Date().getFullYear());
   const [breakTab, setBreakTab]               = useState('summary');
   const [empEvalFilter, setEmpEvalFilter]     = useState('');
+  const [breakSubTab, setBreakSubTab]         = useState('jadwal'); // 'jadwal' | 'eval'
 
   // ─── BREAK SCHEDULE STATES ─────────────────────────────────────────────────
   const [scheduleDate, setScheduleDate]       = useState(new Date().toISOString().split('T')[0]);
@@ -135,6 +137,50 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
     isOpen: false, title: '', message: '', confirmText: 'YAKIN', cancelText: 'BATAL', onConfirm: null
   });
   const [toast, setToast] = useState({ show: false, type: '', message: '' });
+
+  const combinedAttendanceLogs = useMemo(() => {
+    const logs = [...realtimeLogs];
+    const leaves = JSON.parse(localStorage.getItem('hris_leaves') || '[]');
+    const approvedLeaves = leaves.filter(l => (l.status === 'approved' || l.status === 'APPROVED'));
+    
+    approvedLeaves.forEach(l => {
+      const emp = employees.find(e => 
+        (e.id && String(e.id) === String(l.employee_id)) || 
+        (e.full_name && e.full_name.toLowerCase().trim() === (l.employee_name || l.nama_karyawan || '').toLowerCase().trim())
+      );
+      if (!emp) return;
+      
+      const start = new Date(l.start_date);
+      const end = l.end_date ? new Date(l.end_date) : start;
+      
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        const hasLog = logs.some(log => 
+          String(log.employee_id) === String(emp.id) && log.tanggal === dateStr
+        );
+        if (!hasLog) {
+          logs.push({
+            id: `leave-${l.id}-${dateStr}`,
+            employee_id: emp.id,
+            full_name: emp.full_name || emp.nama || '',
+            nama_karyawan: emp.full_name || emp.nama || '',
+            jabatan: emp.jabatan || emp.position || '',
+            outlet: emp.outlet || '',
+            tanggal: dateStr,
+            jam_masuk: '',
+            jam_keluar: '',
+            realtimeStatus: 'absen',
+            status_in: 'leave_approved',
+            _fromLeave: true,
+            leave_type: l.leave_type || l.jenis_absen || 'Cuti',
+            sent_status: 'sent',
+            created_at: new Date().toISOString(),
+          });
+        }
+      }
+    });
+    return logs;
+  }, [realtimeLogs, employees]);
 
   // Peak Days State
   const [peakDays, setPeakDays] = useState([]);
@@ -504,7 +550,7 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
   const handleSaveInputBoard = () => {
     if (!inputBoardOutlet) { showToast('error', 'Pilih outlet terlebih dahulu.'); return; }
     if (inputBoardRows.length === 0) { showToast('error', 'Tidak ada karyawan untuk disimpan.'); return; }
-    setShowAttPreview(true);
+    setInputStep(2); // Go to Preview slide
   };
 
   const handleConfirmInputBoard = () => {
@@ -527,8 +573,8 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
     const updated = [...existing, ...newLogs];
     localStorage.setItem('hris_attendances_realtime', JSON.stringify(updated));
     setRealtimeLogs(updated);
-    setShowAttPreview(false);
     setShowInputBoard(false);
+    setInputStep(1);
     setInputBoardRows([]);
     setInputBoardOutlet('');
     showToast('success', `✅ ${newLogs.length} data kehadiran berhasil disimpan dan dikirim ke mobile APK!`);
@@ -1061,10 +1107,9 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
 
   // ─── TABS CONFIG (4 Tab Baru) ───────────────────────────────────────────────
   const tabs = [
-    { id:'attendance',     label:'Kehadiran Karyawan',        emoji:'📋' },
-    { id:'break_schedule', label:'Jadwal Istirahat',          emoji:'🕒' },
-    { id:'break_eval',     label:'Evaluasi Denda Istirahat',  emoji:'💸' },
-    { id:'peak_days',      label:'Master Hari Sibuk',         emoji:'🗓️' },
+    { id:'attendance',     label:'Kehadiran Karyawan',  emoji:'📋' },
+    { id:'break_schedule', label:'Jadwal Istirahat',    emoji:'🕒' },
+    { id:'peak_days',      label:'Master Hari Sibuk',   emoji:'🗓️' },
   ];
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1111,7 +1156,7 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <h3 style={{ fontSize:'1rem', fontWeight:700, color:'var(--text-main)', margin:0 }}>📋 Data Kehadiran Karyawan</h3>
             <button
-              onClick={() => { setShowInputBoard(true); setInputBoardRows([]); setInputBoardOutlet(''); }}
+              onClick={() => { setShowInputBoard(true); setInputStep(1); setInputBoardRows([]); setInputBoardOutlet(''); }}
               style={{ background:'var(--primary-solid)', color:'#fff', border:'none', borderRadius:'10px',
                 padding:'10px 20px', fontWeight:700, fontSize:'0.85rem', cursor:'pointer',
                 display:'flex', alignItems:'center', gap:'8px', boxShadow:'0 4px 12px rgba(59,130,246,0.3)' }}
@@ -1124,24 +1169,58 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
           <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center',
             background:'var(--bg-card)', border:'1px solid var(--border-color)', borderRadius:'12px', padding:'12px 16px' }}>
             <Filter size={15} color='var(--text-muted)'/>
-            <select value={attFilterOutlet} onChange={e=>setAttFilterOutlet(e.target.value)}
-              style={{ height:'36px', border:'1px solid var(--border-color)', borderRadius:'8px',
-                background:'var(--bg-surface)', color:'var(--text-main)', fontSize:'0.82rem', padding:'0 10px', minWidth:'160px' }}>
-              <option value=''>Semua Outlet</option>
-              {availableOutlets.map(o=><option key={o} value={o}>{o}</option>)}
-            </select>
-            <input type='date' value={attFilterDate} onChange={e=>setAttFilterDate(e.target.value)}
+            <div style={{ position:'relative', display:'inline-block' }} onMouseLeave={() => setShowAttOutletDropdown(false)}>
+              <button onClick={() => setShowAttOutletDropdown(!showAttOutletDropdown)} style={{
+                height:'36px', border:'1px solid var(--border-color)', borderRadius:'8px',
+                background:'var(--bg-surface)', color:'var(--text-main)', fontSize:'0.82rem', padding:'0 12px', minWidth:'180px',
+                display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer'
+              }}>
+                <span>{attFilterOutlets.length === 0 ? '🏪 Semua Outlet' : `🏪 ${attFilterOutlets.length} Outlet`}</span>
+                <span style={{ fontSize:'0.6rem' }}>▼</span>
+              </button>
+              {showAttOutletDropdown && (
+                <div style={{
+                  position:'absolute', top:'100%', left:0, zIndex:100, background:'var(--bg-card)',
+                  border:'1px solid var(--border-color)', borderRadius:'8px', width:'240px',
+                  maxHeight:'220px', overflowY:'auto', padding:'8px', marginTop:'4px', boxShadow:'0 10px 25px rgba(0,0,0,0.5)'
+                }}>
+                  <label style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px', fontSize:'0.8rem', color:'var(--text-main)', cursor:'pointer' }}>
+                    <input type="checkbox" checked={attFilterOutlets.length === 0} onChange={() => setAttFilterOutlets([])} />
+                    <strong>Semua Outlet</strong>
+                  </label>
+                  <hr style={{ border:'none', borderTop:'1px solid var(--border-color)', margin:'6px 0' }} />
+                  {availableOutlets.map(o => {
+                    const isChecked = attFilterOutlets.includes(o);
+                    return (
+                      <label key={o} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px', fontSize:'0.8rem', color:'var(--text-main)', cursor:'pointer' }}>
+                        <input type="checkbox" checked={isChecked} onChange={() => {
+                          if (isChecked) {
+                            setAttFilterOutlets(attFilterOutlets.filter(x => x !== o));
+                          } else {
+                            setAttFilterOutlets([...attFilterOutlets, o]);
+                          }
+                        }} />
+                        <span>{o}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <input type='date' min='2020-01-01' max='2040-12-31' value={attFilterDate} onChange={e=>setAttFilterDate(e.target.value)}
               style={{ height:'36px', border:'1px solid var(--border-color)', borderRadius:'8px',
                 background:'var(--bg-surface)', color:'var(--text-main)', fontSize:'0.82rem', padding:'0 10px' }}/>
             <select value={attFilterMonth} onChange={e=>setAttFilterMonth(Number(e.target.value))}
               style={{ height:'36px', border:'1px solid var(--border-color)', borderRadius:'8px',
                 background:'var(--bg-surface)', color:'var(--text-main)', fontSize:'0.82rem', padding:'0 10px' }}>
+              <option value=''>📅 Semua Bulan</option>
               {BULAN.map((b,i)=><option key={i+1} value={i+1}>{b}</option>)}
             </select>
             <select value={attFilterYear} onChange={e=>setAttFilterYear(Number(e.target.value))}
               style={{ height:'36px', border:'1px solid var(--border-color)', borderRadius:'8px',
                 background:'var(--bg-surface)', color:'var(--text-main)', fontSize:'0.82rem', padding:'0 10px' }}>
-              {Array.from({length:20},(_,i)=>2020+i).map(y=><option key={y} value={y}>{y}</option>)}
+              <option value=''>Semua Tahun</option>
+              {Array.from({length:21},(_,i)=>2020+i).map(y=><option key={y} value={y}>{y}</option>)}
             </select>
             <select value={attFilterStatus} onChange={e=>setAttFilterStatus(e.target.value)}
               style={{ height:'36px', border:'1px solid var(--border-color)', borderRadius:'8px',
@@ -1150,7 +1229,7 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
               <option value='Hadir & Tepat Waktu'>Hadir & Tepat Waktu</option>
               <option value='Hadir & Terlambat'>Hadir & Terlambat</option>
               <option value='Setengah Hari'>Setengah Hari</option>
-              <option value='Absen'>Absen</option>
+              <option value='Absen'>Absen / Cuti / Sakit / Izin</option>
             </select>
           </div>
 
@@ -1161,8 +1240,18 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
               <button onClick={() => {
                 const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
                 doc.setFontSize(14); doc.text('Laporan Kehadiran Karyawan', 14, 15);
-                const filtered = realtimeLogs.filter(l => {
-                  if (attFilterOutlet && (l.outlet||'').toUpperCase().trim() !== attFilterOutlet.toUpperCase().trim()) return false;
+                const filtered = combinedAttendanceLogs.filter(l => {
+                  if (attFilterOutlets.length > 0 && !attFilterOutlets.some(o => (l.outlet||'').toUpperCase().trim() === o.toUpperCase().trim())) return false;
+                  if (attFilterDate && (l.tanggal||l.date||'') !== attFilterDate) return false;
+                  if (attFilterStatus) {
+                    const s = getAttendanceStatus(l);
+                    if (!s.toLowerCase().includes(attFilterStatus.toLowerCase())) return false;
+                  }
+                  const d = new Date(l.tanggal||l.date||l.created_at||'');
+                  if (!isNaN(d.getTime())) {
+                    if (attFilterMonth && d.getMonth()+1 !== attFilterMonth) return false;
+                    if (attFilterYear && d.getFullYear() !== attFilterYear) return false;
+                  }
                   return true;
                 });
                 autoTable(doc, {
@@ -1173,7 +1262,7 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
                     l.tanggal||l.date||'-', l.jam_masuk||l.clock_in||'-', l.jam_keluar||l.clock_out||'-',
                     getAttendanceStatus(l),
                     calculateWorkDuration(l.jam_masuk||l.clock_in, l.jam_keluar||l.clock_out, l.jam_mulai_istirahat, l.jam_akhir_istirahat),
-                    getMenitTerlambat(l) > 0 ? getMenitTerlambat(l) : '-',
+                    getMenitTerlambat(l) > 0 ? `${getMenitTerlambat(l)} menit` : '-',
                     l.sent_status === 'sent' ? 'Terkirim' : 'Belum'
                   ])
                 });
@@ -1192,9 +1281,9 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
                   </tr>
                 </thead>
                 <tbody>
-                  {realtimeLogs
+                  {combinedAttendanceLogs
                     .filter(l => {
-                      if (attFilterOutlet && (l.outlet||'').toUpperCase().trim() !== attFilterOutlet.toUpperCase().trim()) return false;
+                      if (attFilterOutlets.length > 0 && !attFilterOutlets.some(o => (l.outlet||'').toUpperCase().trim() === o.toUpperCase().trim())) return false;
                       if (attFilterDate && (l.tanggal||l.date||'') !== attFilterDate) return false;
                       if (attFilterStatus) { const s = getAttendanceStatus(l); if (!s.toLowerCase().includes(attFilterStatus.toLowerCase())) return false; }
                       const d = new Date(l.tanggal||l.date||l.created_at||'');
@@ -1250,8 +1339,8 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
                     })}
                 </tbody>
               </table>
-              {realtimeLogs.filter(l => {
-                if (attFilterOutlet && (l.outlet||'').toUpperCase().trim() !== attFilterOutlet.toUpperCase().trim()) return false;
+              {combinedAttendanceLogs.filter(l => {
+                if (attFilterOutlets.length > 0 && !attFilterOutlets.some(o => (l.outlet||'').toUpperCase().trim() === o.toUpperCase().trim())) return false;
                 return true;
               }).length === 0 && (
                 <div style={{ textAlign:'center', padding:'40px', color:'var(--text-muted)', fontSize:'0.88rem' }}>📋 Belum ada data kehadiran.</div>
@@ -1259,180 +1348,191 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
             </div>
           </div>
 
-          {/* ── PAPAN INPUT MODAL ── */}
+          {/* ── PAPAN INPUT MODAL WITH SLIDING STEP TRANSITION ── */}
           {showInputBoard && (
-            <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.55)', zIndex:9000,
-              display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'30px 16px' }}>
+            <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.65)', zIndex:9000,
+              display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'40px 16px' }}>
               <div style={{ background:'var(--bg-surface)', border:'2px solid var(--accent-primary)', borderRadius:'18px',
-                width:'100%', maxWidth:'800px', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', animation:'scaleUp 0.3s ease' }}>
+                width:'100%', maxWidth:'800px', boxShadow:'0 25px 65px rgba(0,0,0,0.55)', animation:'scaleUp 0.3s ease',
+                overflow:'hidden', marginTop:'20px' }}>
+                
+                {/* Header */}
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
                   padding:'18px 24px', borderBottom:'1px solid var(--border-color)',
-                  background:'linear-gradient(135deg,rgba(59,130,246,0.08),transparent)', borderRadius:'18px 18px 0 0' }}>
+                  background:'linear-gradient(135deg,rgba(0,173,181,0.08),transparent)' }}>
                   <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
                     <span style={{ fontSize:'1.3rem' }}>📋</span>
                     <div>
-                      <h3 style={{ margin:0, fontSize:'1rem', fontWeight:800, color:'var(--text-main)' }}>Tambahkan Kehadiran Karyawan</h3>
-                      <p style={{ margin:0, fontSize:'0.78rem', color:'var(--text-muted)' }}>Isi data kehadiran berdasarkan outlet dan tanggal</p>
+                      <h3 style={{ margin:0, fontSize:'1rem', fontWeight:800, color:'var(--text-main)' }}>
+                        {inputStep === 1 ? 'Tambahkan Kehadiran Karyawan (Langkah 1/2)' : 'Pratinjau Kehadiran (Langkah 2/2)'}
+                      </h3>
+                      <p style={{ margin:0, fontSize:'0.78rem', color:'var(--text-muted)' }}>
+                        {inputStep === 1 ? 'Lengkapi data kehadiran berdasarkan outlet dan tanggal' : 'Periksa kembali data sebelum menyimpan dan mengirim ke mobile APK'}
+                      </p>
                     </div>
                   </div>
                   <button onClick={() => setShowInputBoard(false)} style={{ background:'transparent', border:'none', cursor:'pointer', color:'var(--text-muted)', padding:'4px' }}><X size={20}/></button>
                 </div>
 
-                <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
-                  {/* Tanggal & Outlet */}
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
-                    <div>
-                      <label style={{ fontSize:'0.82rem', fontWeight:600, color:'var(--text-muted)', display:'block', marginBottom:'6px' }}>📅 Tanggal Kehadiran</label>
-                      <input type='date' value={inputBoardDate}
-                        min='2020-01-01' max='2040-12-31'
-                        onChange={e => setInputBoardDate(e.target.value)}
-                        style={{ width:'100%', height:'40px', border:'1px solid var(--border-color)', borderRadius:'8px',
-                          background:'var(--bg-main)', color:'var(--text-main)', padding:'0 12px', fontSize:'0.88rem' }}/>
+                {/* Sliding Content Container */}
+                <div style={{ display:'flex', width:'200%', transition:'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)', transform: inputStep === 1 ? 'translateX(0%)' : 'translateX(-50%)' }}>
+                  
+                  {/* STEP 1: Input Form */}
+                  <div style={{ width:'50%', padding:'24px', display:'flex', flexDirection:'column', gap:'16px', boxSizing:'border-box' }}>
+                    {/* Tanggal & Outlet */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+                      <div>
+                        <label style={{ fontSize:'0.82rem', fontWeight:600, color:'var(--text-muted)', display:'block', marginBottom:'6px' }}>📅 Tanggal Kehadiran</label>
+                        <input type='date' value={inputBoardDate}
+                          min='2020-01-01' max='2040-12-31'
+                          onChange={e => setInputBoardDate(e.target.value)}
+                          style={{ width:'100%', height:'40px', border:'1px solid var(--border-color)', borderRadius:'8px',
+                            background:'var(--bg-main)', color:'var(--text-main)', padding:'0 12px', fontSize:'0.88rem' }}/>
+                      </div>
+                      <div>
+                        <label style={{ fontSize:'0.82rem', fontWeight:600, color:'var(--text-muted)', display:'block', marginBottom:'6px' }}>🏪 Pilih Outlet</label>
+                        <select value={inputBoardOutlet}
+                          onChange={e => { setInputBoardOutlet(e.target.value); generateInputBoardRows(e.target.value); }}
+                          style={{ width:'100%', height:'40px', border:'1px solid var(--border-color)', borderRadius:'8px',
+                            background:'var(--bg-main)', color:'var(--text-main)', padding:'0 12px', fontSize:'0.88rem' }}>
+                          <option value=''>-- Pilih Outlet --</option>
+                          {availableOutlets.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <label style={{ fontSize:'0.82rem', fontWeight:600, color:'var(--text-muted)', display:'block', marginBottom:'6px' }}>🏪 Pilih Outlet</label>
-                      <select value={inputBoardOutlet}
-                        onChange={e => { setInputBoardOutlet(e.target.value); generateInputBoardRows(e.target.value); }}
-                        style={{ width:'100%', height:'40px', border:'1px solid var(--border-color)', borderRadius:'8px',
-                          background:'var(--bg-main)', color:'var(--text-main)', padding:'0 12px', fontSize:'0.88rem' }}>
-                        <option value=''>-- Pilih Outlet --</option>
-                        {availableOutlets.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
+
+                    {/* Tabel Input Karyawan */}
+                    {inputBoardRows.length > 0 ? (
+                      <div style={{ border:'1px solid var(--border-color)', borderRadius:'10px', overflow:'hidden' }}>
+                        <div style={{ overflowX:'auto', maxHeight:'300px' }}>
+                          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.82rem' }}>
+                            <thead>
+                              <tr style={{ background:'rgba(0,173,181,0.08)' }}>
+                                {['Nama Karyawan','Jabatan','Status','Jam Masuk','Jam Keluar'].map(h =>
+                                  <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontWeight:700, fontSize:'0.73rem', textTransform:'uppercase', color:'var(--accent-primary)', whiteSpace:'nowrap' }}>{h}</th>
+                                )}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {inputBoardRows.map((row, idx) => (
+                                <tr key={idx} style={{ borderTop:'1px solid var(--border-color)' }}>
+                                  <td style={{ padding:'10px 12px', fontWeight:600 }}>{row.emp_name}</td>
+                                  <td style={{ padding:'10px 12px', color:'var(--text-muted)', fontSize:'0.78rem' }}>{row.jabatan||'-'}</td>
+                                  <td style={{ padding:'10px 12px' }}>
+                                    <select value={row.status} onChange={e => updateInputRow(idx,'status',e.target.value)}
+                                      style={{ height:'32px', border:'1px solid var(--border-color)', borderRadius:'6px',
+                                        background:row.status==='hadir'?'rgba(16,185,129,0.1)':'rgba(239,68,68,0.1)',
+                                        color:row.status==='hadir'?'#10b981':'#ef4444', fontWeight:700, padding:'0 8px', fontSize:'0.8rem' }}>
+                                      <option value='hadir'>Hadir</option>
+                                      <option value='absen'>Absen</option>
+                                    </select>
+                                  </td>
+                                  <td style={{ padding:'10px 12px' }}>
+                                    {row.status === 'hadir' ? (
+                                      <input type='time' value={row.jam_masuk} onChange={e => updateInputRow(idx,'jam_masuk',e.target.value)}
+                                        style={{ height:'32px', border:'1px solid var(--border-color)', borderRadius:'6px', background:'var(--bg-main)', color:'var(--text-main)', padding:'0 8px', fontSize:'0.8rem' }}/>
+                                    ) : <span style={{ color:'var(--text-muted)', fontSize:'0.78rem' }}>-</span>}
+                                  </td>
+                                  <td style={{ padding:'10px 12px' }}>
+                                    {row.status === 'hadir' ? (
+                                      <input type='time' value={row.jam_keluar} onChange={e => updateInputRow(idx,'jam_keluar',e.target.value)}
+                                        style={{ height:'32px', border:'1px solid var(--border-color)', borderRadius:'6px', background:'var(--bg-main)', color:'var(--text-main)', padding:'0 8px', fontSize:'0.8rem' }}/>
+                                    ) : <span style={{ color:'var(--text-muted)', fontSize:'0.78rem' }}>-</span>}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : inputBoardOutlet ? (
+                      <div style={{ textAlign:'center', padding:'30px', color:'var(--text-muted)', fontSize:'0.88rem' }}>
+                        ✅ Semua karyawan outlet ini sedang dalam status cuti/izin yang disetujui, atau tidak ada karyawan aktif.
+                      </div>
+                    ) : (
+                      <div style={{ textAlign:'center', padding:'30px', color:'var(--text-muted)', fontSize:'0.88rem' }}>
+                        👆 Pilih outlet untuk menampilkan daftar karyawan
+                      </div>
+                    )}
+
+                    {/* Footer Step 1 */}
+                    <div style={{ display:'flex', gap:'12px', justifyContent:'flex-end', marginTop:'8px' }}>
+                      <button onClick={() => setShowInputBoard(false)}
+                        style={{ padding:'10px 20px', border:'1px solid var(--border-color)', borderRadius:'10px',
+                          background:'transparent', color:'var(--text-muted)', cursor:'pointer', fontWeight:600, fontSize:'0.85rem' }}>Batal</button>
+                      <button onClick={handleSaveInputBoard}
+                        style={{ padding:'10px 24px', background:'var(--primary-solid)', color:'#fff', border:'none',
+                          borderRadius:'10px', fontWeight:700, fontSize:'0.85rem', cursor:'pointer',
+                          boxShadow:'0 4px 12px rgba(59,130,246,0.3)', display:'flex', alignItems:'center', gap:'8px' }}>
+                        Lanjut ke Pratinjau <ArrowRight size={16}/>
+                      </button>
                     </div>
                   </div>
 
-                  {/* Tabel Input Karyawan */}
-                  {inputBoardRows.length > 0 ? (
+                  {/* STEP 2: Preview Panel */}
+                  <div style={{ width:'50%', padding:'24px', display:'flex', flexDirection:'column', gap:'16px', boxSizing:'border-box' }}>
+                    <div style={{ fontSize:'0.85rem', color:'var(--text-muted)', borderBottom:'1px solid var(--border-color)', paddingBottom:'10px' }}>
+                      📅 <strong>Tanggal:</strong> {inputBoardDate} &nbsp;|&nbsp;
+                      🏪 <strong>Outlet:</strong> {inputBoardOutlet} &nbsp;|&nbsp;
+                      👥 <strong>Total:</strong> {inputBoardRows.length} Karyawan
+                    </div>
+                    
                     <div style={{ border:'1px solid var(--border-color)', borderRadius:'10px', overflow:'hidden' }}>
-                      <div style={{ overflowX:'auto' }}>
+                      <div style={{ overflowX:'auto', maxHeight:'300px' }}>
                         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.82rem' }}>
                           <thead>
-                            <tr style={{ background:'rgba(59,130,246,0.08)' }}>
-                              {['Nama Karyawan','Jabatan','Status','Jam Masuk','Jam Keluar'].map(h =>
-                                <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontWeight:700, fontSize:'0.73rem', textTransform:'uppercase', color:'#3B82F6', whiteSpace:'nowrap' }}>{h}</th>
+                            <tr style={{ background:'rgba(16,185,129,0.08)' }}>
+                              {['Nama','Status','Jam Masuk','Jam Keluar','Status Kehadiran'].map(h =>
+                                <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontWeight:700, color:'#10b981', fontSize:'0.73rem', textTransform:'uppercase' }}>{h}</th>
                               )}
                             </tr>
                           </thead>
                           <tbody>
-                            {inputBoardRows.map((row, idx) => (
-                              <tr key={idx} style={{ borderTop:'1px solid var(--border-color)' }}>
-                                <td style={{ padding:'10px 12px', fontWeight:600 }}>{row.emp_name}</td>
-                                <td style={{ padding:'10px 12px', color:'var(--text-muted)', fontSize:'0.78rem' }}>{row.jabatan||'-'}</td>
-                                <td style={{ padding:'10px 12px' }}>
-                                  <select value={row.status} onChange={e => updateInputRow(idx,'status',e.target.value)}
-                                    style={{ height:'32px', border:'1px solid var(--border-color)', borderRadius:'6px',
-                                      background:row.status==='hadir'?'rgba(16,185,129,0.1)':'rgba(239,68,68,0.1)',
-                                      color:row.status==='hadir'?'#10b981':'#ef4444', fontWeight:700, padding:'0 8px', fontSize:'0.8rem' }}>
-                                    <option value='hadir'>Hadir</option>
-                                    <option value='absen'>Absen</option>
-                                  </select>
-                                </td>
-                                <td style={{ padding:'10px 12px' }}>
-                                  {row.status === 'hadir' ? (
-                                    <input type='time' value={row.jam_masuk} onChange={e => updateInputRow(idx,'jam_masuk',e.target.value)}
-                                      style={{ height:'32px', border:'1px solid var(--border-color)', borderRadius:'6px', background:'var(--bg-main)', color:'var(--text-main)', padding:'0 8px', fontSize:'0.8rem' }}/>
-                                  ) : <span style={{ color:'var(--text-muted)', fontSize:'0.78rem' }}>-</span>}
-                                </td>
-                                <td style={{ padding:'10px 12px' }}>
-                                  {row.status === 'hadir' ? (
-                                    <input type='time' value={row.jam_keluar} onChange={e => updateInputRow(idx,'jam_keluar',e.target.value)}
-                                      style={{ height:'32px', border:'1px solid var(--border-color)', borderRadius:'6px', background:'var(--bg-main)', color:'var(--text-main)', padding:'0 8px', fontSize:'0.8rem' }}/>
-                                  ) : <span style={{ color:'var(--text-muted)', fontSize:'0.78rem' }}>-</span>}
-                                </td>
-                              </tr>
-                            ))}
+                            {inputBoardRows.map((row, idx) => {
+                              const fakeLog = { jam_masuk: row.jam_masuk, jam_keluar: row.jam_keluar, realtimeStatus: row.status, outlet: inputBoardOutlet };
+                              const s = row.status === 'absen' ? 'Absen' : getAttendanceStatus(fakeLog);
+                              const sColor = s.includes('Tepat') ? '#10b981' : s.includes('Terlambat') ? '#f59e0b' : s === 'Absen' ? '#ef4444' : '#a78bfa';
+                              return (
+                                <tr key={idx} style={{ borderTop:'1px solid var(--border-color)' }}>
+                                  <td style={{ padding:'8px 12px', fontWeight:600 }}>{row.emp_name}</td>
+                                  <td style={{ padding:'8px 12px' }}>
+                                    <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'0.72rem', fontWeight:700,
+                                      background: row.status==='hadir'?'rgba(16,185,129,0.1)':'rgba(239,68,68,0.1)',
+                                      color: row.status==='hadir'?'#10b981':'#ef4444' }}>
+                                      {row.status === 'hadir' ? 'Hadir' : 'Absen'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding:'8px 12px' }}>{row.status==='absen'?'-':row.jam_masuk||'-'}</td>
+                                  <td style={{ padding:'8px 12px' }}>{row.status==='absen'?'-':row.jam_keluar||'-'}</td>
+                                  <td style={{ padding:'8px 12px' }}>
+                                    <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'0.72rem', fontWeight:700,
+                                      background:`${sColor}18`, color:sColor, border:`1px solid ${sColor}40` }}>{s}</span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
                     </div>
-                  ) : inputBoardOutlet ? (
-                    <div style={{ textAlign:'center', padding:'30px', color:'var(--text-muted)', fontSize:'0.88rem' }}>
-                      ✅ Semua karyawan outlet ini sedang dalam status cuti/izin yang disetujui, atau tidak ada karyawan aktif.
-                    </div>
-                  ) : (
-                    <div style={{ textAlign:'center', padding:'30px', color:'var(--text-muted)', fontSize:'0.88rem' }}>
-                      👆 Pilih outlet untuk menampilkan daftar karyawan
-                    </div>
-                  )}
 
-                  {/* Tombol Aksi */}
-                  <div style={{ display:'flex', gap:'12px', justifyContent:'flex-end' }}>
-                    <button onClick={() => setShowInputBoard(false)}
-                      style={{ padding:'10px 20px', border:'1px solid var(--border-color)', borderRadius:'10px',
-                        background:'transparent', color:'var(--text-muted)', cursor:'pointer', fontWeight:600, fontSize:'0.85rem' }}>Batal</button>
-                    <button onClick={handleSaveInputBoard}
-                      style={{ padding:'10px 24px', background:'var(--primary-solid)', color:'#fff', border:'none',
-                        borderRadius:'10px', fontWeight:700, fontSize:'0.85rem', cursor:'pointer',
-                        boxShadow:'0 4px 12px rgba(59,130,246,0.3)', display:'flex', alignItems:'center', gap:'8px' }}>
-                      <CheckCircle size={16}/> Simpan & Preview
-                    </button>
+                    {/* Footer Step 2 */}
+                    <div style={{ display:'flex', gap:'12px', justifyContent:'flex-end', marginTop:'8px' }}>
+                      <button onClick={() => setInputStep(1)}
+                        style={{ padding:'10px 20px', border:'1px solid var(--border-color)', borderRadius:'10px',
+                          background:'transparent', color:'var(--text-muted)', cursor:'pointer', fontWeight:600, fontSize:'0.85rem',
+                          display:'flex', alignItems:'center', gap:'6px' }}>
+                        <ArrowLeft size={16}/> Edit Lagi
+                      </button>
+                      <button onClick={handleConfirmInputBoard}
+                        style={{ padding:'10px 24px', background:'#10b981', color:'#fff', border:'none',
+                          borderRadius:'10px', fontWeight:700, fontSize:'0.85rem', cursor:'pointer',
+                          boxShadow:'0 4px 12px rgba(16,185,129,0.35)', display:'flex', alignItems:'center', gap:'8px' }}>
+                        <CheckCircle size={16}/> OK — Simpan & Kirim ke APK
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </div>
-            </div>
-          )}
 
-          {/* ── PREVIEW SEBELUM KIRIM ── */}
-          {showAttPreview && (
-            <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.65)', zIndex:9500,
-              display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ background:'var(--bg-surface)', border:'2px solid #10b981', borderRadius:'18px', width:'100%', maxWidth:'680px',
-                boxShadow:'0 20px 60px rgba(0,0,0,0.4)', maxHeight:'80vh', overflow:'auto' }}>
-                <div style={{ padding:'20px 24px', borderBottom:'1px solid var(--border-color)', background:'rgba(16,185,129,0.06)', borderRadius:'18px 18px 0 0' }}>
-                  <h3 style={{ margin:0, fontSize:'1rem', fontWeight:800, color:'#10b981' }}>✅ Preview Data Kehadiran</h3>
-                  <p style={{ margin:'4px 0 0', fontSize:'0.8rem', color:'var(--text-muted)' }}>Periksa data sebelum menyimpan dan mengirim ke mobile APK karyawan</p>
-                </div>
-                <div style={{ padding:'20px 24px' }}>
-                  <div style={{ fontSize:'0.85rem', color:'var(--text-muted)', marginBottom:'12px' }}>
-                    📅 <strong>Tanggal:</strong> {inputBoardDate} &nbsp;|&nbsp;
-                    🏪 <strong>Outlet:</strong> {inputBoardOutlet} &nbsp;|&nbsp;
-                    👥 <strong>Total:</strong> {inputBoardRows.length} karyawan
-                  </div>
-                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.82rem' }}>
-                    <thead>
-                      <tr style={{ background:'rgba(16,185,129,0.08)' }}>
-                        {['Nama','Status','Jam Masuk','Jam Keluar','Status Kehadiran'].map(h =>
-                          <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontWeight:700, color:'#10b981', fontSize:'0.73rem', textTransform:'uppercase' }}>{h}</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inputBoardRows.map((row,idx) => {
-                        const fakeLog = { jam_masuk: row.jam_masuk, jam_keluar: row.jam_keluar, realtimeStatus: row.status, outlet: inputBoardOutlet };
-                        const s = row.status === 'absen' ? 'Absen' : getAttendanceStatus(fakeLog);
-                        const sColor = s.includes('Tepat') ? '#10b981' : s.includes('Terlambat') ? '#f59e0b' : s === 'Absen' ? '#ef4444' : '#a78bfa';
-                        return (
-                          <tr key={idx} style={{ borderTop:'1px solid var(--border-color)' }}>
-                            <td style={{ padding:'8px 12px', fontWeight:600 }}>{row.emp_name}</td>
-                            <td style={{ padding:'8px 12px' }}>
-                              <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'0.72rem', fontWeight:700,
-                                background: row.status==='hadir'?'rgba(16,185,129,0.1)':'rgba(239,68,68,0.1)',
-                                color: row.status==='hadir'?'#10b981':'#ef4444' }}>
-                                {row.status === 'hadir' ? 'Hadir' : 'Absen'}
-                              </span>
-                            </td>
-                            <td style={{ padding:'8px 12px' }}>{row.status==='absen'?'-':row.jam_masuk||'-'}</td>
-                            <td style={{ padding:'8px 12px' }}>{row.status==='absen'?'-':row.jam_keluar||'-'}</td>
-                            <td style={{ padding:'8px 12px' }}>
-                              <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'0.72rem', fontWeight:700,
-                                background:`${sColor}18`, color:sColor, border:`1px solid ${sColor}40` }}>{s}</span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{ padding:'16px 24px', borderTop:'1px solid var(--border-color)', display:'flex', gap:'12px', justifyContent:'flex-end' }}>
-                  <button onClick={() => setShowAttPreview(false)}
-                    style={{ padding:'10px 20px', border:'1px solid var(--border-color)', borderRadius:'10px',
-                      background:'transparent', color:'var(--text-muted)', cursor:'pointer', fontWeight:600, fontSize:'0.85rem' }}>Edit Lagi</button>
-                  <button onClick={handleConfirmInputBoard}
-                    style={{ padding:'10px 24px', background:'#10b981', color:'#fff', border:'none',
-                      borderRadius:'10px', fontWeight:700, fontSize:'0.85rem', cursor:'pointer',
-                      boxShadow:'0 4px 12px rgba(16,185,129,0.35)', display:'flex', alignItems:'center', gap:'8px' }}>
-                    <CheckCircle size={16}/> OK — Simpan & Kirim ke APK
-                  </button>
                 </div>
               </div>
             </div>
@@ -1839,294 +1939,339 @@ export default function Attendances({ token, API_URL, userPermissions, setActive
           TAB 4: JADWAL ISTIRAHAT
       ══════════════════════════════════════════════════════════════════════ */}
       {activeSubTab === 'break_schedule' && (
-        <div className="glass-card animate-fade-in" style={{ padding:'28px' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'24px', flexWrap:'wrap', gap:'12px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-              <div style={{ width:'42px', height:'42px', borderRadius:'10px', background:'rgba(245,158,11,0.1)', display:'flex', alignItems:'center', justifyContent:'center', color:'#f59e0b' }}><Clock size={20}/></div>
-              <div>
-                <h3 style={{ fontSize:'1.1rem', fontWeight:800, color:'#fff', margin:0 }}>ATUR JADWAL ISTIRAHAT HARIAN</h3>
-                <p style={{ fontSize:'0.8rem', color:'var(--text-muted)', margin:0 }}>Pembagian sesi istirahat otomatis per outlet, adil & gender-aware</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Scheduler Controls */}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'14px', marginBottom:'24px', padding:'18px 20px', background:'var(--bg-surface)', border:'1px solid var(--border-color)', borderRadius:'12px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
-              <div style={{ position:'relative' }}>
-                <Calendar size={14} color="var(--text-muted)" style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}/>
-                <input type="date" className="input-field" value={scheduleDate} onChange={e=>setScheduleDate(e.target.value)} style={{ paddingLeft:'30px', height:'40px', fontSize:'0.82rem', width:'160px' }}/>
-              </div>
-              <div style={{ position:'relative' }}>
-                <MapPin size={14} color="var(--text-muted)" style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}/>
-                <select className="input-field" value={scheduleOutlet} onChange={e=>setScheduleOutlet(e.target.value)} style={{ paddingLeft:'30px', height:'40px', fontSize:'0.82rem', minWidth:'220px' }}>
-                  <option value="">🏪 Pilih Outlet Cabang...</option>
-                  {availableOutlets.map(o=><option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-            </div>
-            <button onClick={generateBreakSchedules} disabled={!scheduleOutlet} style={{
-              height:'40px', padding:'0 20px', background:!scheduleOutlet?'rgba(245,158,11,0.1)':'#f59e0b',
-              border:`1px solid ${!scheduleOutlet?'rgba(245,158,11,0.2)':'#f59e0b'}`,
-              color:!scheduleOutlet?'rgba(245,158,11,0.4)':'#000',
-              borderRadius:'8px', fontSize:'0.85rem', fontWeight:800,
-              cursor:!scheduleOutlet?'not-allowed':'pointer', display:'flex', alignItems:'center', gap:'8px', transition:'all 0.2s'
-            }}>
-              <Clock size={15}/><span>⚙️ Generate Otomatis</span>
+        <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
+          {/* Sub-Tab Navigation for Break Schedule */}
+          <div style={{
+            display: 'flex',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '12px',
+            padding: '5px',
+            gap: '6px',
+            alignSelf: 'flex-start',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.2)'
+          }}>
+            <button
+              onClick={() => setBreakSubTab('jadwal')}
+              style={{
+                padding: '8px 16px',
+                background: breakSubTab === 'jadwal' ? 'var(--primary-glow)' : 'transparent',
+                border: breakSubTab === 'jadwal' ? '1px solid var(--primary-solid)' : '1px solid transparent',
+                borderRadius: '8px',
+                color: breakSubTab === 'jadwal' ? 'var(--primary-solid)' : 'var(--text-muted)',
+                fontWeight: breakSubTab === 'jadwal' ? 800 : 500,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              🕒 Jadwal Istirahat
+            </button>
+            <button
+              onClick={() => setBreakSubTab('eval')}
+              style={{
+                padding: '8px 16px',
+                background: breakSubTab === 'eval' ? 'var(--primary-glow)' : 'transparent',
+                border: breakSubTab === 'eval' ? '1px solid var(--primary-solid)' : '1px solid transparent',
+                borderRadius: '8px',
+                color: breakSubTab === 'eval' ? 'var(--primary-solid)' : 'var(--text-muted)',
+                fontWeight: breakSubTab === 'eval' ? 800 : 500,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              💸 Evaluasi Denda Istirahat
             </button>
           </div>
 
-          {/* Warnings */}
-          {generatedSchedules.length > 0 && getSessionWarnings(generatedSchedules).length > 0 && (
-            <div style={{ background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.3)', padding:'14px 18px', borderRadius:'10px', marginBottom:'20px', display:'flex', flexDirection:'column', gap:'6px' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
-                <AlertTriangle size={16} color="#f59e0b"/><span style={{ fontSize:'0.8rem', fontWeight:800, color:'#f59e0b', textTransform:'uppercase' }}>Peringatan Jadwal</span>
-              </div>
-              {getSessionWarnings(generatedSchedules).map((w,i)=><div key={i} style={{ fontSize:'0.82rem', color:'#fbbf24' }}>{w}</div>)}
-            </div>
-          )}
-
-          {/* Schedule Table */}
-          <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-color)', marginBottom:'24px' }}>
-            <table className="data-table" style={{ fontSize:'12px', minWidth:'800px' }}>
-              <thead>
-                <tr>
-                  <th style={{width:'40px'}}>No</th>
-                  <th>Nama Karyawan</th>
-                  <th>NIK</th>
-                  <th>Jabatan</th>
-                  <th>Gender</th>
-                  <th>Sesi</th>
-                  <th>Waktu Istirahat</th>
-                  <th style={{textAlign:'center',width:'80px'}}>Hapus</th>
-                </tr>
-              </thead>
-              <tbody>
-                {generatedSchedules.length === 0 ? (
-                  <tr><td colSpan={8} style={{ textAlign:'center', color:'var(--text-muted)', padding:'48px', fontSize:'0.88rem' }}>
-                    Pilih outlet dan klik <strong>Generate Otomatis</strong> untuk membuat jadwal istirahat.
-                  </td></tr>
-                ) : (
-                  generatedSchedules.map((item, i) => {
-                    const isFemale = (item.gender||'').toLowerCase()==='wanita';
-                    const duration = getRestDurationForOutlet(scheduleOutlet);
-                    const numSess = duration === 2 ? 3 : 2;
-                    const sessColors = { 1:'rgba(0,173,181,0.15)', 2:'rgba(167,139,250,0.15)', 3:'rgba(34,197,94,0.15)' };
-                    const sessBorder = { 1:'#00ADB5', 2:'#a78bfa', 3:'#22c55e' };
-                    return (
-                      <tr key={item.employee_id}>
-                        <td style={{fontWeight:600,color:'var(--text-muted)'}}>{i+1}</td>
-                        <td style={{color:'#fff',fontWeight:700}}>{toTitleCase(item.full_name)}</td>
-                        <td style={{fontFamily:'monospace',fontSize:'11px'}}>{item.nik}</td>
-                        <td style={{color:'var(--text-muted)'}}>{toTitleCase(item.position)}</td>
-                        <td>
-                          <span style={{ padding:'3px 10px', borderRadius:'20px', fontSize:'0.72rem', fontWeight:700, background:isFemale?'rgba(236,72,153,0.12)':'rgba(59,130,246,0.12)', color:isFemale?'#f472b6':'#60a5fa', border:`1px solid ${isFemale?'rgba(236,72,153,0.3)':'rgba(59,130,246,0.3)'}` }}>
-                            {item.gender||'Pria'}
-                          </span>
-                        </td>
-                        <td>
-                          <select value={item.sesi} onChange={e=>handleSessionChange(item.employee_id,parseInt(e.target.value,10))}
-                            style={{ background:'var(--bg-surface)', color:'#fff', border:`1px solid ${sessBorder[item.sesi]||'var(--border-color)'}`, padding:'4px 10px', borderRadius:'8px', fontSize:'0.78rem', fontWeight:700 }}>
-                            {Array.from({ length: numSess }, (_, idx) => idx + 1).map(o=><option key={o} value={o}>Sesi {o}</option>)}
-                          </select>
-                        </td>
-                        <td>
-                          <span style={{ display:'inline-flex', alignItems:'center', gap:'6px', padding:'4px 12px', borderRadius:'8px', fontSize:'0.78rem', fontWeight:700, background:sessColors[item.sesi]||'transparent', color:sessBorder[item.sesi]||'#fff', border:`1px solid ${sessBorder[item.sesi]||'var(--border-color)'}25` }}>
-                            <Clock size={12}/>{item.jam_mulai} – {item.jam_selesai} WIB
-                          </span>
-                        </td>
-                        <td style={{textAlign:'center'}}>
-                          <button onClick={()=>handleDeleteScheduleRow(item.employee_id)} style={{ background:'var(--danger-glow)', border:'none', color:'var(--danger)', padding:'5px 7px', borderRadius:'6px', cursor:'pointer' }}><Trash2 size={13}/></button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Sesi Summary */}
-          {generatedSchedules.length > 0 && (
-            <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', marginBottom:'20px' }}>
-              {[1,2,3].filter(s => generatedSchedules.some(g=>g.sesi===s)).map(s=>{
-                const cnt = generatedSchedules.filter(g=>g.sesi===s).length;
-                const colors = { 1:'#00ADB5', 2:'#a78bfa', 3:'#22c55e' };
-                return <div key={s} style={{ padding:'10px 18px', borderRadius:'10px', background:`${colors[s]}15`, border:`1px solid ${colors[s]}40`, display:'flex', alignItems:'center', gap:'8px' }}>
-                  <div style={{ width:'10px', height:'10px', borderRadius:'50%', background:colors[s] }}/>
-                  <span style={{ fontSize:'0.82rem', fontWeight:700, color:colors[s] }}>Sesi {s}: {cnt} karyawan</span>
-                </div>;
-              })}
-              <div style={{ marginLeft:'auto', display:'flex', alignItems:'center' }}>
-                <span style={{ fontSize:'0.82rem', color:'var(--text-muted)' }}>Total: <strong style={{color:'#fff'}}>{generatedSchedules.length}</strong> karyawan terjadwal</span>
-              </div>
-            </div>
-          )}
-
-          {/* Sync Button */}
-          {generatedSchedules.length > 0 && (
-            <div style={{ display:'flex', justifyContent:'flex-end' }}>
-              <button onClick={syncBreakSchedules} disabled={isSyncingSchedule} style={{
-                height:'46px', padding:'0 28px', background:isSyncingSchedule?'rgba(245,158,11,0.2)':'#f59e0b',
-                border:'none', borderRadius:'10px', color:isSyncingSchedule?'rgba(0,0,0,0.4)':'#000',
-                fontSize:'0.9rem', fontWeight:800, cursor:isSyncingSchedule?'not-allowed':'pointer',
-                display:'flex', alignItems:'center', gap:'10px', boxShadow:'0 4px 20px rgba(245,158,11,0.25)', transition:'all 0.2s'
-              }}>
-                {isSyncingSchedule ? <><Loader2 size={16} style={{ animation:'spin 1s linear infinite' }}/><span>Menyinkronkan...</span></> : <><span>🚀 Kirim Jadwal ke Karyawan</span></>}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════════
-          TAB 5: EVALUASI & DENDA ISTIRAHAT
-      ══════════════════════════════════════════════════════════════════════ */}
-      {activeSubTab === 'break_eval' && (
-        <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
-
-          {/* Eval Summary Cards */}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:'16px' }}>
-            {[
-              { label:'Total Dievaluasi', value:breakSummary.length, color:'#94a3b8', icon:<Users size={20}/> },
-              { label:'Kena Denda', value:kenaDedan, color:'#ef4444', icon:<AlertTriangle size={20}/> },
-              { label:'Bebas Denda', value:breakSummary.length-kenaDedan, color:'#22c55e', icon:<CheckCircle size={20}/> },
-              { label:'Total Estimasi Denda', value:`Rp ${totalDenda.toLocaleString('id-ID')}`, color:'#f59e0b', icon:<TrendingDown size={20}/> },
-            ].map((c,i)=>(
-              <div key={i} style={{ background:'var(--bg-card)', border:`1px solid ${c.color}25`, borderRadius:'14px', padding:'20px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', boxShadow:`0 4px 20px ${c.color}15` }}>
-                <div>
-                  <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'4px' }}>{c.label}</div>
-                  <div style={{ fontSize:i===3?'1.1rem':'1.7rem', fontWeight:800, color:c.color }}>{c.value}</div>
-                </div>
-                <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:`${c.color}15`, display:'flex', alignItems:'center', justifyContent:'center', color:c.color }}>{c.icon}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Eval Table Card */}
-          <div className="glass-card animate-fade-in" style={{ padding:'28px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px', flexWrap:'wrap', gap:'12px' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-                <div style={{ width:'42px', height:'42px', borderRadius:'10px', background:'rgba(239,68,68,0.1)', display:'flex', alignItems:'center', justifyContent:'center', color:'#ef4444' }}><TrendingDown size={20}/></div>
-                <div>
-                  <h3 style={{ fontSize:'1.1rem', fontWeight:800, color:'#fff', margin:0 }}>EVALUASI & DENDA ISTIRAHAT</h3>
-                  <p style={{ fontSize:'0.8rem', color:'var(--text-muted)', margin:0 }}>Toleransi: 15 Poin | Denda: Rp 1.000/Poin kelebihan</p>
+          {breakSubTab === 'jadwal' && (
+            <div className="glass-card animate-fade-in" style={{ padding:'28px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'24px', flexWrap:'wrap', gap:'12px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+                  <div style={{ width:'42px', height:'42px', borderRadius:'10px', background:'rgba(245,158,11,0.1)', display:'flex', alignItems:'center', justifyContent:'center', color:'#f59e0b' }}><Clock size={20}/></div>
+                  <div>
+                    <h3 style={{ fontSize:'1.1rem', fontWeight:800, color:'#fff', margin:0 }}>ATUR JADWAL ISTIRAHAT HARIAN</h3>
+                    <p style={{ fontSize:'0.8rem', color:'var(--text-muted)', margin:0 }}>Pembagian sesi istirahat otomatis per outlet, adil & gender-aware</p>
+                  </div>
                 </div>
               </div>
-              <div style={{ display:'flex', gap:'10px' }}>
-                <div style={{ display:'flex', gap:'8px', borderBottom:'1px solid var(--border-color)', paddingBottom:'0', alignItems:'flex-end' }}>
-                  {['summary','detail'].map(t=>(
-                    <button key={t} onClick={()=>setBreakTab(t)} style={{ padding:'8px 16px', background:breakTab===t?'var(--primary-glow)':'transparent', border:`1px solid ${breakTab===t?'var(--primary-solid)':'var(--border-color)'}`, borderRadius:'8px', color:breakTab===t?'var(--primary-solid)':'var(--text-muted)', fontWeight:breakTab===t?800:500, fontSize:'0.82rem', cursor:'pointer' }}>
-                      {t==='summary'?'📋 Ringkasan Denda':'📄 Detail Log'}
-                    </button>
-                  ))}
-                </div>
-                <button onClick={exportEvalPDF} style={{ height:'38px', padding:'0 16px', background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', color:'#ef4444', borderRadius:'8px', fontSize:'0.82rem', fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:'8px' }}>
-                  <FileText size={14}/><span>Ekspor PDF</span>
-                </button>
-                <button onClick={() => setActiveTab && setActiveTab('payroll')} style={{ height:'38px', padding:'0 16px', background:'rgba(59,130,246,0.1)', border:'1px solid rgba(59,130,246,0.3)', color:'var(--accent-primary)', borderRadius:'8px', fontSize:'0.82rem', fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:'8px' }}>
-                  <span>💰 Kelola Gaji & Denda</span>
-                </button>
-              </div>
-            </div>
 
-            {/* Eval Filters */}
-            <div style={{ display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap', marginBottom:'20px' }}>
-              <FilterBar 
-                outlet={outletEval} 
-                setOutlet={setOutletEval} 
-                month={monthEval} 
-                setMonth={setMonthEval} 
-                year={yearEval} 
-                setYear={setYearEval}
-                extra={
+              {/* Scheduler Controls */}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'14px', marginBottom:'24px', padding:'18px 20px', background:'var(--bg-surface)', border:'1px solid var(--border-color)', borderRadius:'12px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
                   <div style={{ position:'relative' }}>
-                    <Users size={14} color="var(--text-muted)" style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} />
-                    <select className="input-field" value={empEvalFilter} onChange={e=>setEmpEvalFilter(e.target.value)}
-                      style={{ paddingLeft:'30px', height:'38px', fontSize:'0.82rem', minWidth:'180px', background:'var(--bg-main)', color:'#fff' }}>
-                      <option value="">👤 Semua Karyawan</option>
-                      {filteredEmployeesForEval.map(e=><option key={e.id} value={e.id}>{e.full_name}</option>)}
+                    <Calendar size={14} color="var(--text-muted)" style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}/>
+                    <input type="date" className="input-field" value={scheduleDate} onChange={e=>setScheduleDate(e.target.value)} style={{ paddingLeft:'30px', height:'40px', fontSize:'0.82rem', width:'160px' }}/>
+                  </div>
+                  <div style={{ position:'relative' }}>
+                    <MapPin size={14} color="var(--text-muted)" style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}/>
+                    <select className="input-field" value={scheduleOutlet} onChange={e=>setScheduleOutlet(e.target.value)} style={{ paddingLeft:'30px', height:'40px', fontSize:'0.82rem', minWidth:'220px' }}>
+                      <option value="">🏪 Pilih Outlet Cabang...</option>
+                      {availableOutlets.map(o=><option key={o} value={o}>{o}</option>)}
                     </select>
                   </div>
-                }
-              />
-            </div>
+                </div>
+                <button onClick={generateBreakSchedules} disabled={!scheduleOutlet} style={{
+                  height:'40px', padding:'0 20px', background:!scheduleOutlet?'rgba(245,158,11,0.1)':'#f59e0b',
+                  border:`1px solid ${!scheduleOutlet?'rgba(245,158,11,0.2)':'#f59e0b'}`,
+                  color:!scheduleOutlet?'rgba(245,158,11,0.4)':'#000',
+                  borderRadius:'8px', fontSize:'0.85rem', fontWeight:800,
+                  cursor:!scheduleOutlet?'not-allowed':'pointer', display:'flex', alignItems:'center', gap:'8px', transition:'all 0.2s'
+                }}>
+                  <Clock size={15}/><span>⚙️ Generate Otomatis</span>
+                </button>
+              </div>
 
-            {breakTab === 'summary' ? (
-              <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-color)' }}>
+              {/* Warnings */}
+              {generatedSchedules.length > 0 && getSessionWarnings(generatedSchedules).length > 0 && (
+                <div style={{ background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.3)', padding:'14px 18px', borderRadius:'10px', marginBottom:'20px', display:'flex', flexDirection:'column', gap:'6px' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                    <AlertTriangle size={16} color="#f59e0b"/><span style={{ fontSize:'0.8rem', fontWeight:800, color:'#f59e0b', textTransform:'uppercase' }}>Peringatan Jadwal</span>
+                  </div>
+                  {getSessionWarnings(generatedSchedules).map((w,i)=><div key={i} style={{ fontSize:'0.82rem', color:'#fbbf24' }}>{w}</div>)}
+                </div>
+              )}
+
+              {/* Schedule Table */}
+              <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-color)', marginBottom:'24px' }}>
                 <table className="data-table" style={{ fontSize:'12px', minWidth:'800px' }}>
                   <thead>
                     <tr>
-                      <th>No</th><th>Nama Karyawan</th><th>NIK</th><th>Outlet</th>
-                      <th style={{textAlign:'center'}}>Hari Dicatat</th>
-                      <th style={{textAlign:'center'}}>Total Poin</th>
-                      <th style={{textAlign:'center'}}>Toleransi</th>
-                      <th style={{textAlign:'center'}}>Poin Kena Denda</th>
-                      <th style={{textAlign:'center'}}>Estimasi Denda</th>
+                      <th style={{width:'40px'}}>No</th>
+                      <th>Nama Karyawan</th>
+                      <th>NIK</th>
+                      <th>Jabatan</th>
+                      <th>Gender</th>
+                      <th>Sesi</th>
+                      <th>Waktu Istirahat</th>
+                      <th style={{textAlign:'center',width:'80px'}}>Hapus</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {breakSummary.length === 0 ? (
-                      <tr><td colSpan={9} style={{ textAlign:'center', color:'var(--text-muted)', padding:'48px' }}>Tidak ada data istirahat di periode & outlet yang dipilih.</td></tr>
-                    ) : breakSummary.map((item,idx)=>(
-                      <tr key={idx} style={{ background:item.denda>0?'rgba(239,68,68,0.04)':'transparent' }}>
-                        <td>{idx+1}</td>
-                        <td style={{color:'#fff',fontWeight:700}}>{toTitleCase(item.name)}</td>
-                        <td style={{fontFamily:'monospace',fontSize:'11px'}}>{item.nik}</td>
-                        <td style={{color:'var(--text-muted)'}}>{toTitleCase(item.outlet)}</td>
-                        <td style={{textAlign:'center'}}>{item.totalDays} hari</td>
-                        <td style={{textAlign:'center',fontWeight:700,color:item.totalPoints>15?'#f59e0b':'var(--text-muted)'}}>{item.totalPoints} poin</td>
-                        <td style={{textAlign:'center',color:'#22c55e',fontWeight:600}}>15 poin</td>
-                        <td style={{textAlign:'center',fontWeight:800,color:item.excessPoints>0?'#ef4444':'var(--text-muted)'}}>{item.excessPoints} poin</td>
-                        <td style={{textAlign:'center',fontWeight:800,color:item.denda>0?'#ef4444':'var(--text-muted)'}}>
-                          {item.denda>0 ? <span style={{ padding:'3px 10px', borderRadius:'20px', background:'rgba(239,68,68,0.12)', border:'1px solid rgba(239,68,68,0.3)', fontSize:'0.8rem' }}>Rp {item.denda.toLocaleString('id-ID')}</span> : 'Rp 0'}
-                        </td>
-                      </tr>
-                    ))}
+                    {generatedSchedules.length === 0 ? (
+                      <tr><td colSpan={8} style={{ textAlign:'center', color:'var(--text-muted)', padding:'48px', fontSize:'0.88rem' }}>
+                        Pilih outlet dan klik <strong>Generate Otomatis</strong> untuk membuat jadwal istirahat.
+                      </td></tr>
+                    ) : (
+                      generatedSchedules.map((item, i) => {
+                        const isFemale = (item.gender||'').toLowerCase()==='wanita';
+                        const duration = getRestDurationForOutlet(scheduleOutlet);
+                        const numSess = duration === 2 ? 3 : 2;
+                        const sessColors = { 1:'rgba(0,173,181,0.15)', 2:'rgba(167,139,250,0.15)', 3:'rgba(34,197,94,0.15)' };
+                        const sessBorder = { 1:'#00ADB5', 2:'#a78bfa', 3:'#22c55e' };
+                        return (
+                          <tr key={item.employee_id}>
+                            <td style={{fontWeight:600,color:'var(--text-muted)'}}>{i+1}</td>
+                            <td style={{color:'#fff',fontWeight:700}}>{toTitleCase(item.full_name)}</td>
+                            <td style={{fontFamily:'monospace',fontSize:'11px'}}>{item.nik}</td>
+                            <td style={{color:'var(--text-muted)'}}>{toTitleCase(item.position)}</td>
+                            <td>
+                              <span style={{ padding:'3px 10px', borderRadius:'20px', fontSize:'0.72rem', fontWeight:700, background:isFemale?'rgba(236,72,153,0.12)':'rgba(59,130,246,0.12)', color:isFemale?'#f472b6':'#60a5fa', border:`1px solid ${isFemale?'rgba(236,72,153,0.3)':'rgba(59,130,246,0.3)'}` }}>
+                                {item.gender||'Pria'}
+                              </span>
+                            </td>
+                            <td>
+                              <select value={item.sesi} onChange={e=>handleSessionChange(item.employee_id,parseInt(e.target.value,10))}
+                                style={{ background:'var(--bg-surface)', color:'#fff', border:`1px solid ${sessBorder[item.sesi]||'var(--border-color)'}`, padding:'4px 10px', borderRadius:'8px', fontSize:'0.78rem', fontWeight:700 }}>
+                                {Array.from({ length: numSess }, (_, idx) => idx + 1).map(o=><option key={o} value={o}>Sesi {o}</option>)}
+                              </select>
+                            </td>
+                            <td>
+                              <span style={{ display:'inline-flex', alignItems:'center', gap:'6px', padding:'4px 12px', borderRadius:'8px', fontSize:'0.78rem', fontWeight:700, background:sessColors[item.sesi]||'transparent', color:sessBorder[item.sesi]||'#fff', border:`1px solid ${sessBorder[item.sesi]||'var(--border-color)'}25` }}>
+                                <Clock size={12}/>{item.jam_mulai} – {item.jam_selesai} WIB
+                              </span>
+                            </td>
+                            <td style={{textAlign:'center'}}>
+                              <button onClick={()=>handleDeleteScheduleRow(item.employee_id)} style={{ background:'var(--danger-glow)', border:'none', color:'var(--danger)', padding:'5px 7px', borderRadius:'6px', cursor:'pointer' }}><Trash2 size={13}/></button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
-            ) : (
-              <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-color)' }}>
-                <table className="data-table" style={{ fontSize:'12px', minWidth:'850px' }}>
-                  <thead>
-                    <tr>
-                      <th>No</th><th>Tanggal</th><th>Nama Karyawan</th><th>Outlet</th>
-                      <th>Istirahat Riil</th><th style={{textAlign:'center'}}>Durasi Riil</th>
-                      <th style={{textAlign:'center'}}>Kebijakan</th>
-                      <th style={{textAlign:'center'}}>Poin (Menit Lebih)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredEval.length === 0 ? (
-                      <tr><td colSpan={8} style={{ textAlign:'center', color:'var(--text-muted)', padding:'48px' }}>Tidak ada log istirahat di periode & outlet ini.</td></tr>
-                    ) : filteredEval.map((log,idx)=>{
-                      const overage = calculateBreakOverage(log);
-                      const displayOutlet = resolveOutlet(log);
-                      const officialMin = getOfficialBreakDuration(displayOutlet);
-                      let s = parseToMinutes(log.jam_mulai_istirahat), e = parseToMinutes(log.jam_akhir_istirahat);
-                      if (e<s) e+=1440;
-                      const actualMin = e-s;
-                      return (
-                        <tr key={idx} style={{ background:overage>0?'rgba(239,68,68,0.03)':'transparent' }}>
-                          <td>{idx+1}</td>
-                          <td style={{fontWeight:600}}>{log.date}</td>
-                          <td style={{color:'#fff',fontWeight:700}}>{toTitleCase(log.full_name||log.nama_karyawan)}</td>
-                          <td style={{color:'var(--text-muted)'}}>{toTitleCase(displayOutlet)}</td>
-                          <td style={{color:'var(--primary-solid)',fontWeight:600,fontFamily:'monospace'}}>{log.jam_mulai_istirahat} – {log.jam_akhir_istirahat}</td>
-                          <td style={{textAlign:'center'}}><span style={{color:actualMin>officialMin?'#f59e0b':'var(--text-muted)',fontWeight:600}}>{actualMin}m ({Math.floor(actualMin/60)}j {actualMin%60}m)</span></td>
-                          <td style={{textAlign:'center',color:'#22c55e'}}>{officialMin}m ({officialMin/60}j)</td>
-                          <td style={{textAlign:'center',fontWeight:800,color:overage>0?'#ef4444':'var(--text-muted)'}}>
-                            {overage>0?<span style={{padding:'2px 10px',borderRadius:'20px',background:'rgba(239,68,68,0.12)',border:'1px solid rgba(239,68,68,0.3)'}}>+{overage} poin</span>:'0 poin'}
-                          </td>
+
+              {/* Sesi Summary */}
+              {generatedSchedules.length > 0 && (
+                <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', marginBottom:'20px' }}>
+                  {[1,2,3].filter(s => generatedSchedules.some(g=>g.sesi===s)).map(s=>{
+                    const cnt = generatedSchedules.filter(g=>g.sesi===s).length;
+                    const colors = { 1:'#00ADB5', 2:'#a78bfa', 3:'#22c55e' };
+                    return <div key={s} style={{ padding:'10px 18px', borderRadius:'10px', background:`${colors[s]}15`, border:`1px solid ${colors[s]}40`, display:'flex', alignItems:'center', gap:'8px' }}>
+                      <div style={{ width:'10px', height:'10px', borderRadius:'50%', background:colors[s] }}/>
+                      <span style={{ fontSize:'0.82rem', fontWeight:700, color:colors[s] }}>Sesi {s}: {cnt} karyawan</span>
+                    </div>;
+                  })}
+                  <div style={{ marginLeft:'auto', display:'flex', alignItems:'center' }}>
+                    <span style={{ fontSize:'0.82rem', color:'var(--text-muted)' }}>Total: <strong style={{color:'#fff'}}>{generatedSchedules.length}</strong> karyawan terjadwal</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Sync Button */}
+              {generatedSchedules.length > 0 && (
+                <div style={{ display:'flex', justifyContent:'flex-end' }}>
+                  <button onClick={syncBreakSchedules} disabled={isSyncingSchedule} style={{
+                    height:'46px', padding:'0 28px', background:isSyncingSchedule?'rgba(245,158,11,0.2)':'#f59e0b',
+                    border:'none', borderRadius:'10px', color:isSyncingSchedule?'rgba(0,0,0,0.4)':'#000',
+                    fontSize:'0.9rem', fontWeight:800, cursor:isSyncingSchedule?'not-allowed':'pointer',
+                    display:'flex', alignItems:'center', gap:'10px', boxShadow:'0 4px 20px rgba(245,158,11,0.25)', transition:'all 0.2s'
+                  }}>
+                    {isSyncingSchedule ? <><Loader2 size={16} style={{ animation:'spin 1s linear infinite' }}/><span>Menyinkronkan...</span></> : <><span>🚀 Kirim Jadwal ke Karyawan</span></>}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {breakSubTab === 'eval' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
+              {/* Eval Summary Cards */}
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:'16px' }}>
+                {[
+                  { label:'Total Dievaluasi', value:breakSummary.length, color:'#94a3b8', icon:<Users size={20}/> },
+                  { label:'Kena Denda', value:kenaDedan, color:'#ef4444', icon:<AlertTriangle size={20}/> },
+                  { label:'Bebas Denda', value:breakSummary.length-kenaDedan, color:'#22c55e', icon:<CheckCircle size={20}/> },
+                  { label:'Total Estimasi Denda', value:`Rp ${totalDenda.toLocaleString('id-ID')}`, color:'#f59e0b', icon:<TrendingDown size={20}/> },
+                ].map((c,i)=>(
+                  <div key={i} style={{ background:'var(--bg-card)', border:`1px solid ${c.color}25`, borderRadius:'14px', padding:'20px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', boxShadow:`0 4px 20px ${c.color}15` }}>
+                    <div>
+                      <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'4px' }}>{c.label}</div>
+                      <div style={{ fontSize:i===3?'1.1rem':'1.7rem', fontWeight:800, color:c.color }}>{c.value}</div>
+                    </div>
+                    <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:`${c.color}15`, display:'flex', alignItems:'center', justifyContent:'center', color:c.color }}>{c.icon}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Eval Table Card */}
+              <div className="glass-card animate-fade-in" style={{ padding:'28px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px', flexWrap:'wrap', gap:'12px' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+                    <div style={{ width:'42px', height:'42px', borderRadius:'10px', background:'rgba(239,68,68,0.1)', display:'flex', alignItems:'center', justifyContent:'center', color:'#ef4444' }}><TrendingDown size={20}/></div>
+                    <div>
+                      <h3 style={{ fontSize:'1.1rem', fontWeight:800, color:'#fff', margin:0 }}>EVALUASI & DENDA ISTIRAHAT</h3>
+                      <p style={{ fontSize:'0.8rem', color:'var(--text-muted)', margin:0 }}>Toleransi: 15 Poin | Denda: Rp 1.000/Poin kelebihan</p>
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:'10px' }}>
+                    <div style={{ display:'flex', gap:'8px', borderBottom:'1px solid var(--border-color)', paddingBottom:'0', alignItems:'flex-end' }}>
+                      {['summary','detail'].map(t=>(
+                        <button key={t} onClick={()=>setBreakTab(t)} style={{ padding:'8px 16px', background:breakTab===t?'var(--primary-glow)':'transparent', border:`1px solid ${breakTab===t?'var(--primary-solid)':'var(--border-color)'}`, borderRadius:'8px', color:breakTab===t?'var(--primary-solid)':'var(--text-muted)', fontWeight:breakTab===t?800:500, fontSize:'0.82rem', cursor:'pointer' }}>
+                          {t==='summary'?'📋 Ringkasan Denda':'📄 Detail Log'}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={exportEvalPDF} style={{ height:'38px', padding:'0 16px', background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', color:'#ef4444', borderRadius:'8px', fontSize:'0.82rem', fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:'8px' }}>
+                      <FileText size={14}/><span>Ekspor PDF</span>
+                    </button>
+                    <button onClick={() => setActiveTab && setActiveTab('payroll')} style={{ height:'38px', padding:'0 16px', background:'rgba(59,130,246,0.1)', border:'1px solid rgba(59,130,246,0.3)', color:'var(--accent-primary)', borderRadius:'8px', fontSize:'0.82rem', fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:'8px' }}>
+                      <span>💰 Kelola Gaji & Denda</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Eval Filters */}
+                <div style={{ display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap', marginBottom:'20px' }}>
+                  <FilterBar 
+                    outlet={outletEval} 
+                    setOutlet={setOutletEval} 
+                    month={monthEval} 
+                    setMonth={setMonthEval} 
+                    year={yearEval} 
+                    setYear={setYearEval}
+                    extra={
+                      <div style={{ position:'relative' }}>
+                        <Users size={14} color="var(--text-muted)" style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} />
+                        <select className="input-field" value={empEvalFilter} onChange={e=>setEmpEvalFilter(e.target.value)}
+                          style={{ paddingLeft:'30px', height:'38px', fontSize:'0.82rem', minWidth:'180px', background:'var(--bg-main)', color:'#fff' }}>
+                          <option value="">👤 Semua Karyawan</option>
+                          {filteredEmployeesForEval.map(e=><option key={e.id} value={e.id}>{e.full_name}</option>)}
+                        </select>
+                      </div>
+                    }
+                  />
+                </div>
+
+                {breakTab === 'summary' ? (
+                  <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-color)' }}>
+                    <table className="data-table" style={{ fontSize:'12px', minWidth:'800px' }}>
+                      <thead>
+                        <tr>
+                          <th>No</th><th>Nama Karyawan</th><th>NIK</th><th>Outlet</th>
+                          <th style={{textAlign:'center'}}>Hari Dicatat</th>
+                          <th style={{textAlign:'center'}}>Total Poin</th>
+                          <th style={{textAlign:'center'}}>Toleransi</th>
+                          <th style={{textAlign:'center'}}>Poin Kena Denda</th>
+                          <th style={{textAlign:'center'}}>Estimasi Denda</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        {breakSummary.length === 0 ? (
+                          <tr><td colSpan={9} style={{ textAlign:'center', color:'var(--text-muted)', padding:'48px' }}>Tidak ada data istirahat di periode & outlet yang dipilih.</td></tr>
+                        ) : breakSummary.map((item,idx)=>(
+                          <tr key={idx} style={{ background:item.denda>0?'rgba(239,68,68,0.04)':'transparent' }}>
+                            <td>{idx+1}</td>
+                            <td style={{color:'#fff',fontWeight:700}}>{toTitleCase(item.name)}</td>
+                            <td style={{fontFamily:'monospace',fontSize:'11px'}}>{item.nik}</td>
+                            <td style={{color:'var(--text-muted)'}}>{toTitleCase(item.outlet)}</td>
+                            <td style={{textAlign:'center'}}>{item.totalDays} hari</td>
+                            <td style={{textAlign:'center',fontWeight:700,color:item.totalPoints>15?'#f59e0b':'var(--text-muted)'}}>{item.totalPoints} poin</td>
+                            <td style={{textAlign:'center',color:'#22c55e',fontWeight:600}}>15 poin</td>
+                            <td style={{textAlign:'center',fontWeight:800,color:item.excessPoints>0?'#ef4444':'var(--text-muted)'}}>{item.excessPoints} poin</td>
+                            <td style={{textAlign:'center',fontWeight:800,color:item.denda>0?'#ef4444':'var(--text-muted)'}}>
+                              {item.denda>0 ? <span style={{ padding:'3px 10px', borderRadius:'20px', background:'rgba(239,68,68,0.12)', border:'1px solid rgba(239,68,68,0.3)', fontSize:'0.8rem' }}>Rp {item.denda.toLocaleString('id-ID')}</span> : 'Rp 0'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-color)' }}>
+                    <table className="data-table" style={{ fontSize:'12px', minWidth:'850px' }}>
+                      <thead>
+                        <tr>
+                          <th>No</th><th>Tanggal</th><th>Nama Karyawan</th><th>Outlet</th>
+                          <th>Istirahat Riil</th><th style={{textAlign:'center'}}>Durasi Riil</th>
+                          <th style={{textAlign:'center'}}>Kebijakan</th>
+                          <th style={{textAlign:'center'}}>Poin (Menit Lebih)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredEval.length === 0 ? (
+                          <tr><td colSpan={8} style={{ textAlign:'center', color:'var(--text-muted)', padding:'48px' }}>Tidak ada log istirahat di periode & outlet ini.</td></tr>
+                        ) : filteredEval.map((log,idx)=>{
+                          const overage = calculateBreakOverage(log);
+                          const displayOutlet = resolveOutlet(log);
+                          const officialMin = getOfficialBreakDuration(displayOutlet);
+                          let s = parseToMinutes(log.jam_mulai_istirahat), e = parseToMinutes(log.jam_akhir_istirahat);
+                          if (e<s) e+=1440;
+                          const actualMin = e-s;
+                          return (
+                            <tr key={idx} style={{ background:overage>0?'rgba(239,68,68,0.03)':'transparent' }}>
+                              <td>{idx+1}</td>
+                              <td style={{fontWeight:600}}>{log.date}</td>
+                              <td style={{color:'#fff',fontWeight:700}}>{toTitleCase(log.full_name||log.nama_karyawan)}</td>
+                              <td style={{color:'var(--text-muted)'}}>{toTitleCase(displayOutlet)}</td>
+                              <td style={{color:'var(--primary-solid)',fontWeight:600,fontFamily:'monospace'}}>{log.jam_mulai_istirahat} – {log.jam_akhir_istirahat}</td>
+                              <td style={{textAlign:'center'}}><span style={{color:actualMin>officialMin?'#f59e0b':'var(--text-muted)',fontWeight:600}}>{actualMin}m ({Math.floor(actualMin/60)}j {actualMin%60}m)</span></td>
+                              <td style={{textAlign:'center',color:'#22c55e'}}>{officialMin}m ({officialMin/60}j)</td>
+                              <td style={{textAlign:'center',fontWeight:800,color:overage>0?'#ef4444':'var(--text-muted)'}}>
+                                {overage>0?<span style={{padding:'2px 10px',borderRadius:'20px',background:'rgba(239,68,68,0.12)',border:'1px solid rgba(239,68,68,0.3)'}}>+{overage} poin</span>:'0 poin'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
       {/* ══════════════════════════════════════════════════════════════════════

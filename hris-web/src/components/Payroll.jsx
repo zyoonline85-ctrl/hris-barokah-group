@@ -39,7 +39,7 @@ const BULAN = [
 ];
 
 const currentYear = new Date().getFullYear();
-const TAHUN = Array.from({ length: 11 }, (_, i) => 2025 + i);
+const TAHUN = Array.from({ length: 21 }, (_, i) => 2020 + i);
 
 // ─── Lifted Math Helpers ─────────────────────────────────────────────────────
 const getPolicyClockOutTimeLocal = (outletName, policies) => {
