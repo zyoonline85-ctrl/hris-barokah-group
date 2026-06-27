@@ -3,7 +3,8 @@ import {
   getContracts, 
   createContract, 
   signContract, 
-  getContractPdf 
+  getContractPdf,
+  deleteContract
 } from '../controllers/contractController.js';
 import { authenticateToken } from '../middleware/auth.js';
 
@@ -15,5 +16,6 @@ router.get('/', getContracts);
 router.post('/', createContract);
 router.post('/:id/sign', signContract);
 router.get('/:id/pdf', getContractPdf);
+router.delete('/:id', deleteContract);
 
 export default router;

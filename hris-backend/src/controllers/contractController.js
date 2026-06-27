@@ -135,7 +135,11 @@ export async function createContract(req, res) {
     });
   }
 
-  const validTypes = ['Surat Pengangkatan', 'Surat Perjanjian Kontrak', 'Surat Dinas', 'Surat Pemindahan Tugas', 'Surat Perintah'];
+  const validTypes = [
+    'Surat Pengangkatan', 'Surat Perjanjian Kontrak', 
+    'Surat Dinas', 'Surat Pemindahan Tugas', 'Surat Perintah',
+    'Surat Magang', 'Kontrak 3 Bulan', 'Kontrak 1 Tahun'
+  ];
   if (!validTypes.includes(jenis_kontrak)) {
     return res.status(400).json({
       status: 'error',
@@ -162,8 +166,9 @@ export async function createContract(req, res) {
     const sequence = (countRow ? countRow.count : 0) + 1;
     const numStr = String(sequence).padStart(4, '0');
 
-    const code = (jenis_kontrak === 'Surat Perjanjian Kontrak') ? 'SPSK' :
-                 (jenis_kontrak === 'Surat Pengangkatan') ? 'SPK' : 'SPT';
+    const code = (jenis_kontrak === 'Surat Magang') ? 'SPKG' :
+                 (jenis_kontrak === 'Kontrak 3 Bulan') ? 'SPSK' :
+                 (jenis_kontrak === 'Kontrak 1 Tahun' || jenis_kontrak === 'Surat Pengangkatan' || jenis_kontrak === 'Surat Perjanjian Kontrak') ? 'SPK' : 'SPT';
     const romanMonths = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
     const romanStr = romanMonths[currentMonth] || 'I';
 
@@ -175,7 +180,13 @@ export async function createContract(req, res) {
       tanggalSelesai = tanggal_pembuatan;
     } else {
       const selesaiDate = new Date(tanggal_pembuatan);
-      selesaiDate.setFullYear(selesaiDate.getFullYear() + 1);
+      if (jenis_kontrak === 'Surat Magang') {
+        selesaiDate.setMonth(selesaiDate.getMonth() + 1);
+      } else if (jenis_kontrak === 'Kontrak 3 Bulan') {
+        selesaiDate.setMonth(selesaiDate.getMonth() + 3);
+      } else {
+        selesaiDate.setFullYear(selesaiDate.getFullYear() + 1);
+      }
       tanggalSelesai = selesaiDate.toISOString().split('T')[0];
     }
 
@@ -766,5 +777,29 @@ export async function getContractPdf(req, res) {
   } catch (error) {
     console.error('getContractPdf error:', error.message);
     return res.status(500).send('<h1>Terjadi kesalahan internal server</h1>');
+  }
+}
+
+export async function deleteContract(req, res) {
+  const { id } = req.params;
+  try {
+    const contract = await dbQuery.get("SELECT * FROM contracts WHERE id = ?", [id]);
+    if (!contract) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Kontrak atau surat penugasan tidak ditemukan.'
+      });
+    }
+    await dbQuery.run("DELETE FROM contracts WHERE id = ?", [id]);
+    return res.status(200).json({
+      status: 'success',
+      message: 'Dokumen berhasil dihapus.'
+    });
+  } catch (error) {
+    console.error('deleteContract error:', error.message);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Gagal menghapus dokumen.'
+    });
   }
 }
