@@ -1,42 +1,42 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  /* Light Theme — Putih & Biru Santai */
-  --bg-main: #F0F4F8;           /* Background utama abu sangat terang */
-  --bg-surface: #FFFFFF;        /* Surface kartu putih bersih */
-  --bg-card: #FFFFFF;
-  --bg-sidebar: #FFFFFF;
-  --bg-header: #FFFFFF;
-  --accent-primary: #3B82F6;    /* Biru santai primary */
-  --text-main: #1E293B;         /* Teks gelap slate */
-  --text-muted: #64748B;        /* Muted slate */
-  --text-dark: #0F172A;
-  --border-color: #E2E8F0;      /* Border abu terang */
+  /* Dark Elegant & Luxurious Theme — Obsidian & Gold */
+  --bg-main: #080C14;           /* Deep obsidian dark background */
+  --bg-surface: #101726;        /* Luxurious dark navy card surface */
+  --bg-card: rgba(16, 23, 38, 0.65); /* Translucent glass card background */
+  --bg-sidebar: #0B0F1A;        /* Sidebar deep dark */
+  --bg-header: rgba(8, 12, 20, 0.85); /* Sticky header translucent */
+  --accent-primary: #DFB15B;    /* Soft premium metallic gold accent */
+  --text-main: #E2E8F0;         /* Slate light text */
+  --text-muted: #94A3B8;        /* Slate muted text */
+  --text-dark: #080C14;         /* Dark text for gold buttons/badges */
+  --border-color: rgba(223, 177, 91, 0.12); /* Subtle gold-tinted borders */
 
-  --bg-secondary-btn: #F1F5F9;
-  --bg-secondary-btn-hover: #E2E8F0;
-  --border-secondary-btn: #CBD5E1;
+  --bg-secondary-btn: #1E293B;
+  --bg-secondary-btn-hover: #334155;
+  --border-secondary-btn: rgba(223, 177, 91, 0.25);
 
-  --primary-solid: #3B82F6;
-  --primary-gradient: linear-gradient(135deg, #3B82F6, #60A5FA);
-  --primary-glow: rgba(59, 130, 246, 0.15);
+  --primary-solid: #DFB15B;     /* Golden button background */
+  --primary-gradient: linear-gradient(135deg, #DFB15B, #F9D976); /* Luxurious gold gradient */
+  --primary-glow: rgba(223, 177, 91, 0.2);
 
-  /* Status colors */
-  --success: #10b981;
+  /* Status colors - glowing variations for high-end look */
+  --success: #10B981;
   --success-glow: rgba(16, 185, 129, 0.15);
-  --status-success: #10b981;
-  --status-error: #ef4444;
-  --warning: #f59e0b;
-  --warning-glow: rgba(245, 158, 11, 0.10);
-  --orange: #f59e0b;
+  --status-success: #10B981;
+  --status-error: #EF4444;
+  --warning: #F59E0B;
+  --warning-glow: rgba(245, 158, 11, 0.1);
+  --orange: #F59E0B;
   --orange-glow: rgba(245, 158, 11, 0.12);
-  --danger: #ef4444;
+  --danger: #EF4444;
   --danger-glow: rgba(239, 68, 68, 0.15);
 
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
-  --backdrop-blur: blur(12px);
-  --transition-smooth: all 0.2s ease-in-out;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3);
+  --backdrop-blur: blur(14px);
+  --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Base Styles */
@@ -66,8 +66,8 @@ body::before {
   width: 100%;
   height: 100%;
   background-image: 
-    linear-gradient(to right, rgba(59, 130, 246, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
+    linear-gradient(to right, rgba(223, 177, 91, 0.015) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(223, 177, 91, 0.015) 1px, transparent 1px);
   background-size: 40px 40px;
   pointer-events: none;
   z-index: -2;
@@ -86,7 +86,7 @@ body::before {
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-main);
+  background: var(--primary-solid);
 }
 
 /* Glassmorphism Card Utility */
@@ -100,13 +100,13 @@ body::before {
 }
 
 .glass-card:hover {
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.12);
+  box-shadow: 0 8px 20px var(--primary-glow);
   border-color: var(--accent-primary);
 }
 
 .btn-primary {
-  background: var(--primary-solid);  /* Sage Green background */
-  color: var(--bg-surface);                    /* White text */
+  background: var(--primary-gradient);
+  color: var(--text-dark); /* Dark text on gold */
   border: none;
   padding: 12px 24px;
   border-radius: 10px;
@@ -121,8 +121,8 @@ body::before {
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  background: #2563EB;
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35);
+  filter: brightness(1.1);
+  box-shadow: 0 6px 20px rgba(223, 177, 91, 0.35);
 }
 
 .btn-primary:active {
@@ -469,7 +469,34 @@ select option {
   box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05) !important;
 }
 
-/* Force dark inline backgrounds to light backgrounds */
+/* Force light/white inline backgrounds to dark surface backgrounds */
+div[style*="background: rgb(255, 255, 255)"],
+div[style*="background: #fff"],
+div[style*="background: #ffffff"],
+div[style*="background: white"],
+div[style*="background: 'white'"],
+div[style*="background-color: rgb(255, 255, 255)"],
+div[style*="background-color: #fff"],
+div[style*="background-color: #ffffff"],
+div[style*="background-color: white"],
+div[style*="background-color: 'white'"],
+div[style*="background: rgba(255, 255, 255"],
+div[style*="background: rgba(255,255,255"] {
+  background: var(--bg-surface) !important;
+  background-color: var(--bg-surface) !important;
+  color: var(--text-main) !important;
+}
+
+/* Force specific panel and popover light backgrounds to dark glass */
+div[style*="background: rgba(255,255,255,0.7)"],
+div[style*="background: rgba(255, 255, 255, 0.7)"] {
+  background: rgba(16, 23, 38, 0.85) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  color: var(--text-main) !important;
+}
+
+/* Force dark inline backgrounds to dark obsidian backgrounds */
 div[style*="background: rgb(31, 21, 12)"],
 div[style*="background: rgb(0, 0, 0)"],
 div[style*="background: #1f150c"],
@@ -483,7 +510,8 @@ div[style*="background: rgba(31, 21, 12"] {
   background-color: var(--bg-surface) !important;
 }
 
-/* Force dark border styles to light grey borders */
+/* Force pink/old borders to gold borders */
+div[style*="border: 1px solid rgba(255, 98, 188"],
 div[style*="border: 1px solid #412D15"],
 div[style*="border: 1px solid #412d15"],
 div[style*="border: 2px solid #412D15"],
@@ -494,13 +522,14 @@ div[style*="border-color: #412D15"] {
   border-color: var(--border-color) !important;
 }
 
-/* Color overrides for text that are inline styled with old cream */
+/* Color overrides for text that are inline styled with old cream or dark colors */
 [style*="color: #E1DCC9"],
 [style*="color: #e1dcc9"],
 [style*="color: '#E1DCC9'"],
 [style*="color: '#e1dcc9'"],
 [style*="color: rgba(225, 220, 201"],
-[style*="color: rgba(225,220,201"] {
+[style*="color: rgba(225,220,201"],
+[style*="color: var(--text-dark)"] {
   color: var(--text-main) !important;
 }
 
@@ -508,10 +537,6 @@ div[style*="border-color: #412D15"] {
 [style*="color: rgb(225, 220, 201)"] {
   color: var(--text-main) !important;
 }
-
-/* ============================================================ */
-/* Light theme is now the default :root — blok ini dihapus.    */
-/* ============================================================ */
 
 /* ============================================================ */
 /* SMOOTH DUAL-THEME TRANSITION ENGINE                          */
@@ -530,7 +555,7 @@ body, header, .sidebar, .glass-card, .main-content, input, select, textarea, but
 .dashed-loading-line {
   width: 200px;
   height: 4px;
-  background-image: linear-gradient(90deg, #3B82F6 50%, transparent 50%);
+  background-image: linear-gradient(90deg, #DFB15B 50%, transparent 50%);
   background-size: 20px 4px;
   animation: movingDashedLine 1s linear infinite;
   margin-bottom: 12px;
@@ -542,7 +567,7 @@ body, header, .sidebar, .glass-card, .main-content, input, select, textarea, but
   50% { opacity: 1; }
 }
 .loading-text-contextual {
-  color: #1E293B;
+  color: #DFB15B;
   font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: 0.5px;
