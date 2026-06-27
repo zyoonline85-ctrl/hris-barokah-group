@@ -6,7 +6,7 @@ import autoTable from 'jspdf-autotable';
 import { useHRIS } from '../context/HRISContext';
 
 
-export default function Attendances({ token, API_URL }) {
+export default function Attendances({ token, API_URL, userPermissions, setActiveTab }) {
   // ─── HRIS Context — Reactive employee list ─────────────────────────────────
   const { activeEmployees: ctxActiveEmployees } = useHRIS();
 
@@ -71,6 +71,7 @@ export default function Attendances({ token, API_URL }) {
   const [monthEval, setMonthEval]             = useState(new Date().getMonth() + 1);
   const [yearEval, setYearEval]               = useState(new Date().getFullYear());
   const [breakTab, setBreakTab]               = useState('summary');
+  const [empEvalFilter, setEmpEvalFilter]     = useState('');
 
   // ─── BREAK SCHEDULE STATES ─────────────────────────────────────────────────
   const [scheduleDate, setScheduleDate]       = useState(new Date().toISOString().split('T')[0]);
@@ -341,6 +342,19 @@ export default function Attendances({ token, API_URL }) {
     try { const v = JSON.parse(p.nilai); return v[outlet] || def; } catch { return p.nilai || def; }
   };
 
+  const getRestDurationForOutlet = (outletName) => {
+    const raw = localStorage.getItem('corporate_policies');
+    const pList = raw ? JSON.parse(raw) : policies;
+    const matching = (pList || []).filter(p => p.status === 'ACTIVE' && (p.nama_aturan || '').toLowerCase().includes('durasi istirahat'))
+      .find(p => p.all_outlets || (p.outlets || []).some(o => o.toUpperCase().trim() === (outletName || '').toUpperCase().trim()));
+    if (matching?.deskripsi) {
+      const m = matching.deskripsi.match(/(\d+)\s*jam/i);
+      if (m) return parseInt(m[1], 10);
+    }
+    if ((outletName || '').toUpperCase().includes('ABS') || (outletName || '').toUpperCase().includes('SURABAYA')) return 2;
+    return 3;
+  };
+
   const getPolicyClockOutTime = (outletName) => {
     const raw = localStorage.getItem('corporate_policies');
     const pList = raw ? JSON.parse(raw) : policies;
@@ -537,6 +551,10 @@ export default function Attendances({ token, API_URL }) {
     if (activeSubTab === 'break_schedule' && scheduleOutlet && scheduleDate) fetchExistingSchedules(scheduleDate, scheduleOutlet);
   }, [activeSubTab, scheduleDate, scheduleOutlet]);
 
+  useEffect(() => {
+    setEmpEvalFilter('');
+  }, [outletEval]);
+
   // ─── FILTERED DATA ─────────────────────────────────────────────────────────
   const filteredRealtime = useMemo(() => realtimeLogs.filter(log => {
     const matchSearch = (log.nama_karyawan || '').toLowerCase().includes(searchRealtime.toLowerCase());
@@ -585,9 +603,13 @@ export default function Attendances({ token, API_URL }) {
         if (monthEval) matchMonth = parseInt(p[1],10) === monthEval;
         if (yearEval) matchYear = parseInt(p[0],10) === yearEval;
       }
-      return matchOutlet && matchMonth && matchYear && log.jam_mulai_istirahat && log.jam_akhir_istirahat;
+      const logEmpName = log.full_name || log.nama_karyawan || '';
+      const matchEmployee = empEvalFilter
+        ? (logEmpName.toLowerCase() === empEvalFilter.toLowerCase() || String(log.employee_id) === String(empEvalFilter))
+        : true;
+      return matchOutlet && matchMonth && matchYear && log.jam_mulai_istirahat && log.jam_akhir_istirahat && matchEmployee;
     });
-  }, [realtimeLogs, historyLogs, employees, outletEval, monthEval, yearEval]);
+  }, [realtimeLogs, historyLogs, employees, outletEval, monthEval, yearEval, empEvalFilter]);
 
   // ─── RECAP BUILDER (Opsi B: gabung realtime + history) ─────────────────────
   const recapData = useMemo(() => {
@@ -709,6 +731,11 @@ export default function Attendances({ token, API_URL }) {
       return { ...item, excessPoints, denda: excessPoints * 1000 };
     }).sort((a,b) => b.denda - a.denda);
   }, [filteredEval, employees]);
+
+  const filteredEmployeesForEval = useMemo(() => {
+    if (!outletEval) return employees;
+    return employees.filter(emp => emp.outlet && emp.outlet.trim().toUpperCase() === outletEval.trim().toUpperCase());
+  }, [employees, outletEval]);
 
   const totalDenda = breakSummary.reduce((s, i) => s + i.denda, 0);
   const kenaDedan = breakSummary.filter(i => i.denda > 0).length;
@@ -834,19 +861,43 @@ export default function Attendances({ token, API_URL }) {
 
   const generateBreakSchedules = () => {
     if (!scheduleOutlet) { showToast('error', 'Pilih outlet terlebih dahulu!'); return; }
+    
+    // Get absent employees on the selected scheduleDate
+    const absentEmployeeIds = new Set();
+    const combinedLogs = [
+      ...realtimeLogs.map(l => ({ ...l, employee_id: l.employee_id || l.nik })),
+      ...historyLogs.map(l => ({ ...l, employee_id: l.employee_id || l.nik }))
+    ];
+    combinedLogs.forEach(log => {
+      if (log.date === scheduleDate) {
+        const status = (log.status || '').toLowerCase();
+        if (['absen', 'absent', 'tidak hadir', 'alpha'].includes(status)) {
+          absentEmployeeIds.add(String(log.employee_id));
+        }
+      }
+    });
+
     const active = employees.filter(e => {
       const empOutlet = (e.outlet || '').toUpperCase().trim();
       const targetOutlet = (scheduleOutlet || '').toUpperCase().trim();
-      return (
-        empOutlet === targetOutlet ||
+      const isCorrectOutlet = empOutlet === targetOutlet ||
         empOutlet.includes(targetOutlet) ||
-        targetOutlet.includes(empOutlet)
-      ) && e.employee_status !== 'inactive';
+        targetOutlet.includes(empOutlet);
+      
+      if (!isCorrectOutlet || e.employee_status === 'inactive') return false;
+      
+      // Exclude if absent
+      return !absentEmployeeIds.has(String(e.id)) && !absentEmployeeIds.has(String(e.nik));
     });
-    if (active.length === 0) { showToast('error', `Tidak ada karyawan aktif di outlet ${scheduleOutlet}!`); return; }
-    const isABS = scheduleOutlet.toUpperCase().includes('ABS') || scheduleOutlet.toUpperCase().includes('SURABAYA');
-    const numSess = isABS ? 3 : 2;
-    const sessions = isABS
+
+    if (active.length === 0) { 
+      showToast('error', `Tidak ada karyawan aktif yang hadir di outlet ${scheduleOutlet} pada tanggal ${scheduleDate}!`); 
+      return; 
+    }
+
+    const duration = getRestDurationForOutlet(scheduleOutlet);
+    const numSess = duration === 2 ? 3 : 2;
+    const sessions = duration === 2
       ? [{ sesi:1,jam_mulai:'12:00',jam_selesai:'14:00' },{ sesi:2,jam_mulai:'14:00',jam_selesai:'16:00' },{ sesi:3,jam_mulai:'16:00',jam_selesai:'18:00' }]
       : [{ sesi:1,jam_mulai:'12:00',jam_selesai:'15:00' },{ sesi:2,jam_mulai:'15:00',jam_selesai:'18:00' }];
 
@@ -872,9 +923,9 @@ export default function Attendances({ token, API_URL }) {
     };
 
     women.forEach((e,i) => assignments[i%numSess].push(e));
-    koki.forEach(e => { const idx = isABS ? minLoad(assignments,'koki') : (assignments[0].filter(x=>(x.position||'').toLowerCase().includes('koki')).length<2?0:1); assignments[idx].push(e); });
-    helper.forEach(e => { const idx = isABS ? minLoad(assignments,'helper') : (assignments[0].filter(x=>(x.position||'').toLowerCase().includes('helper')).length<2?0:1); assignments[idx].push(e); });
-    waiter.forEach(e => { const idx = isABS ? minLoad(assignments,'waiter') : (assignments[0].filter(x=>(x.position||'').toLowerCase().includes('waiter')).length<2?0:1); assignments[idx].push(e); });
+    koki.forEach(e => { const idx = minLoad(assignments,'koki'); assignments[idx].push(e); });
+    helper.forEach(e => { const idx = minLoad(assignments,'helper'); assignments[idx].push(e); });
+    waiter.forEach(e => { const idx = minLoad(assignments,'waiter'); assignments[idx].push(e); });
     other.forEach(e => { const idx = minLoad(assignments); assignments[idx].push(e); });
 
     const result = [];
@@ -882,12 +933,14 @@ export default function Attendances({ token, API_URL }) {
       list.forEach(e => result.push({ employee_id:e.id, full_name:e.full_name, nik:e.nik, position:e.position, gender:e.gender, sesi:sessions[si].sesi, jam_mulai:sessions[si].jam_mulai, jam_selesai:sessions[si].jam_selesai }));
     });
     setGeneratedSchedules(result);
-    showToast('success', `Jadwal berhasil di-generate untuk ${active.length} karyawan.`);
+    showToast('success', `Jadwal berhasil di-generate untuk ${active.length} karyawan (exclude tidak hadir).`);
   };
 
   const handleSessionChange = (empId, sesi) => {
-    const isABS = scheduleOutlet.toUpperCase().includes('ABS') || scheduleOutlet.toUpperCase().includes('SURABAYA');
-    const times = isABS ? {1:['12:00','14:00'],2:['14:00','16:00'],3:['16:00','18:00']} : {1:['12:00','15:00'],2:['15:00','18:00']};
+    const duration = getRestDurationForOutlet(scheduleOutlet);
+    const times = duration === 2 
+      ? {1:['12:00','14:00'],2:['14:00','16:00'],3:['16:00','18:00']} 
+      : {1:['12:00','15:00'],2:['15:00','18:00']};
     setGeneratedSchedules(prev => prev.map(s => s.employee_id === empId ? { ...s, sesi, jam_mulai:times[sesi][0], jam_selesai:times[sesi][1] } : s));
   };
 
@@ -912,18 +965,36 @@ export default function Attendances({ token, API_URL }) {
 
   const getSessionWarnings = (scheds) => {
     const warnings = [];
-    const isABS = (scheduleOutlet||'').toUpperCase().includes('ABS') || (scheduleOutlet||'').toUpperCase().includes('SURABAYA');
+    const duration = getRestDurationForOutlet(scheduleOutlet);
+    const numSess = duration === 2 ? 3 : 2;
+
+    // Check staffing levels for remaining employees on duty in each session
+    const totalKoki = scheds.filter(s => (s.position||'').toLowerCase().includes('koki') || (s.position||'').toLowerCase().includes('cook')).length;
+    const totalWomen = scheds.filter(s => (s.gender||'').toLowerCase() === 'wanita').length;
+    const totalWaiters = scheds.filter(s => (s.position||'').toLowerCase().includes('waiter')).length;
+
+    for (let sesi = 1; sesi <= numSess; sesi++) {
+      const onDuty = scheds.filter(s => s.sesi !== sesi);
+      const onDutyKoki = onDuty.filter(s => (s.position||'').toLowerCase().includes('koki') || (s.position||'').toLowerCase().includes('cook')).length;
+      const onDutyWomen = onDuty.filter(s => (s.gender||'').toLowerCase() === 'wanita').length;
+      const onDutyWaiters = onDuty.filter(s => (s.position||'').toLowerCase().includes('waiter')).length;
+
+      if (totalKoki > 0 && onDutyKoki === 0) {
+        warnings.push(`⚠️ Sesi ${sesi}: Tidak ada Koki yang bertugas (semua sedang istirahat)!`);
+      }
+      if (totalWomen > 0 && onDutyWomen === 0) {
+        warnings.push(`⚠️ Sesi ${sesi}: Tidak ada Karyawan Wanita yang bertugas (semua sedang istirahat)!`);
+      }
+      if (totalWaiters > 0 && onDutyWaiters === 0) {
+        warnings.push(`⚠️ Sesi ${sesi}: Tidak ada Waiter yang bertugas (semua sedang istirahat)!`);
+      }
+    }
+
     const females = scheds.filter(s=>(s.gender||'').toLowerCase()==='wanita');
     if (females.length >= 2) {
       const bySess = {};
       females.forEach(s=>{ bySess[s.sesi]=(bySess[s.sesi]||0)+1; });
       Object.entries(bySess).forEach(([sess, cnt]) => { if (cnt===females.length) warnings.push(`⚠️ Semua karyawan wanita (${cnt}) dijadwalkan istirahat di Sesi ${sess} secara bersamaan!`); });
-    }
-    if (!isABS) {
-      [1,2].forEach(sesi => {
-        const ss = scheds.filter(s=>s.sesi===sesi);
-        ['koki','helper','waiter'].forEach(role => { const cnt=ss.filter(s=>(s.position||'').toLowerCase().includes(role)).length; if(cnt>2) warnings.push(`⚠️ Kuota ${toTitleCase(role)} terlampaui di Sesi ${sesi}: ${cnt} orang (Maks. 2)`); });
-      });
     }
     return warnings;
   };
@@ -1838,7 +1909,8 @@ export default function Attendances({ token, API_URL }) {
                 ) : (
                   generatedSchedules.map((item, i) => {
                     const isFemale = (item.gender||'').toLowerCase()==='wanita';
-                    const isABS = (scheduleOutlet||'').toUpperCase().includes('ABS') || (scheduleOutlet||'').toUpperCase().includes('SURABAYA');
+                    const duration = getRestDurationForOutlet(scheduleOutlet);
+                    const numSess = duration === 2 ? 3 : 2;
                     const sessColors = { 1:'rgba(0,173,181,0.15)', 2:'rgba(167,139,250,0.15)', 3:'rgba(34,197,94,0.15)' };
                     const sessBorder = { 1:'#00ADB5', 2:'#a78bfa', 3:'#22c55e' };
                     return (
@@ -1855,7 +1927,7 @@ export default function Attendances({ token, API_URL }) {
                         <td>
                           <select value={item.sesi} onChange={e=>handleSessionChange(item.employee_id,parseInt(e.target.value,10))}
                             style={{ background:'var(--bg-surface)', color:'#fff', border:`1px solid ${sessBorder[item.sesi]||'var(--border-color)'}`, padding:'4px 10px', borderRadius:'8px', fontSize:'0.78rem', fontWeight:700 }}>
-                            {(isABS?[1,2,3]:[1,2]).map(o=><option key={o} value={o}>Sesi {o}</option>)}
+                            {Array.from({ length: numSess }, (_, idx) => idx + 1).map(o=><option key={o} value={o}>Sesi {o}</option>)}
                           </select>
                         </td>
                         <td>
@@ -1952,12 +2024,32 @@ export default function Attendances({ token, API_URL }) {
                 <button onClick={exportEvalPDF} style={{ height:'38px', padding:'0 16px', background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', color:'#ef4444', borderRadius:'8px', fontSize:'0.82rem', fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:'8px' }}>
                   <FileText size={14}/><span>Ekspor PDF</span>
                 </button>
+                <button onClick={() => setActiveTab && setActiveTab('payroll')} style={{ height:'38px', padding:'0 16px', background:'rgba(59,130,246,0.1)', border:'1px solid rgba(59,130,246,0.3)', color:'var(--accent-primary)', borderRadius:'8px', fontSize:'0.82rem', fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:'8px' }}>
+                  <span>💰 Kelola Gaji & Denda</span>
+                </button>
               </div>
             </div>
 
             {/* Eval Filters */}
             <div style={{ display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap', marginBottom:'20px' }}>
-              <FilterBar outlet={outletEval} setOutlet={setOutletEval} month={monthEval} setMonth={setMonthEval} year={yearEval} setYear={setYearEval}/>
+              <FilterBar 
+                outlet={outletEval} 
+                setOutlet={setOutletEval} 
+                month={monthEval} 
+                setMonth={setMonthEval} 
+                year={yearEval} 
+                setYear={setYearEval}
+                extra={
+                  <div style={{ position:'relative' }}>
+                    <Users size={14} color="var(--text-muted)" style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} />
+                    <select className="input-field" value={empEvalFilter} onChange={e=>setEmpEvalFilter(e.target.value)}
+                      style={{ paddingLeft:'30px', height:'38px', fontSize:'0.82rem', minWidth:'180px', background:'var(--bg-main)', color:'#fff' }}>
+                      <option value="">👤 Semua Karyawan</option>
+                      {filteredEmployeesForEval.map(e=><option key={e.id} value={e.id}>{e.full_name}</option>)}
+                    </select>
+                  </div>
+                }
+              />
             </div>
 
             {breakTab === 'summary' ? (

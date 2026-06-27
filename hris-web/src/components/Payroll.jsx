@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { getLiveOutletList } from '../utils/outletUtils';
 import { useHRIS } from '../context/HRISContext';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // ─── Konstanta Palet Warna ───────────────────────────────────────────────────
 const PALETTE = {
@@ -840,6 +842,7 @@ export default function Payroll({ token, API_URL }) {
   const [filterTahun, setFilterTahun] = useState(currentYear);
   const [filterOutlet, setFilterOutlet] = useState('');
   const [searchName, setSearchName] = useState('');
+  const [filterEmployeeId, setFilterEmployeeId] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
@@ -963,13 +966,20 @@ export default function Payroll({ token, API_URL }) {
     }
   };
 
+  const handleSlipsOutletChange = (e) => {
+    const val = e.target.value;
+    setFilterOutlet(val);
+    setFilterEmployeeId('ALL');
+    setCurrentPage(1);
+  };
+
   const filteredEmployeesForDropdown = React.useMemo(() => {
     const activeEmployees = employees.filter(emp => emp.employee_status !== 'inactive' && emp.status !== 'inactive');
-    if (rekapOutlet === 'ALL') return activeEmployees;
+    if (filterOutlet === '') return activeEmployees;
     return activeEmployees.filter(emp => 
-      (emp.outlet || emp.nama_outlet || '').toUpperCase().trim() === rekapOutlet.toUpperCase().trim()
+      (emp.outlet || emp.nama_outlet || '').toUpperCase().trim() === filterOutlet.toUpperCase().trim()
     );
-  }, [employees, rekapOutlet]);
+  }, [employees, filterOutlet]);
 
   // ── Inisialisasi ──
   useEffect(() => {
@@ -1855,13 +1865,81 @@ export default function Payroll({ token, API_URL }) {
     }
   };
 
+  const handleDownloadPDF = () => {
+    try {
+      const doc = new jsPDF('landscape');
+      
+      // Title Section
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.text('REKAPITULASI PAYROLL KARYAWAN - BAROKAH GRUP', 14, 18);
+      
+      doc.setFont('Helvetica', 'normal');
+      doc.setFontSize(10);
+      const periodeText = `Periode: ${BULAN[filterBulan - 1]} ${filterTahun}`;
+      const outletText = `Outlet: ${filterOutlet || 'Semua Outlet'}`;
+      const userText = `Karyawan: ${filterEmployeeId === 'ALL' ? 'Semua Karyawan' : (employees.find(e => String(e.id) === String(filterEmployeeId) || String(e.employee_id) === String(filterEmployeeId))?.full_name || filterEmployeeId)}`;
+      doc.text(`${periodeText}   |   ${outletText}   |   ${userText}`, 14, 25);
+      doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })} WIB`, 14, 30);
+      
+      // Prepare Table Data
+      const tableHeaders = [['No', 'Nama Karyawan', 'Outlet', 'Jabatan', 'Lama Kerja', 'Total Pendapatan', 'Total Pengeluaran', 'Gaji THP', 'Status Kirim']];
+      
+      const tableData = filtered.map((slip, idx) => [
+        idx + 1,
+        toTitleCase(slip.nama_karyawan),
+        slip.outlet || '-',
+        toTitleCase(slip.jabatan) || '-',
+        slip.lama_bekerja || '-',
+        formatCurrency(slip.total_pendapatan),
+        slip.total_pengeluaran > 0 ? `-${formatCurrency(slip.total_pengeluaran)}` : 'Rp 0',
+        formatCurrency(slip.thp),
+        getSlipLogStatus(slip) === 'dibaca' ? 'Dibaca' : getSlipLogStatus(slip) === 'terkirim' ? 'Diterima' : slip.slip_sent ? 'Terkirim' : 'Belum Kirim'
+      ]);
+      
+      // Subtotal row at the bottom
+      tableData.push([
+        '',
+        'TOTAL REKAP',
+        '',
+        '',
+        `${filtered.length} Karyawan`,
+        formatCurrency(totalPendapatanAll),
+        `-${formatCurrency(totalPengeluaranAll)}`,
+        formatCurrency(totalThp),
+        ''
+      ]);
+      
+      autoTable(doc, {
+        startY: 35,
+        head: tableHeaders,
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [59, 130, 246] }, // Blue theme accent color
+        footStyles: { fillColor: [240, 244, 248], textColor: [15, 23, 42], fontStyle: 'bold' },
+        didParseCell: (data) => {
+          // Make the last row bold (total row)
+          if (data.row.index === tableData.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      });
+      
+      doc.save(`Rekap_Payroll_BarokahGrup_${BULAN[filterBulan - 1]}_${filterTahun}.pdf`);
+      showToast('success', '📄 PDF Rekap Payroll berhasil diunduh!');
+    } catch (err) {
+      console.error(err);
+      showToast('error', '❌ Gagal mengunduh PDF. Silakan coba lagi.');
+    }
+  };
+
   // ── Data yang sudah difilter ──
   const filtered = slips.filter(s => {
     const matchBulan = s.bulan === filterBulan;
     const matchTahun = s.tahun === filterTahun;
     const matchOutlet = filterOutlet === '' || s.outlet === filterOutlet;
-    const matchName = searchName === '' || s.nama_karyawan.toLowerCase().includes(searchName.toLowerCase());
-    return matchBulan && matchTahun && matchOutlet && matchName;
+    const matchEmployee = filterEmployeeId === 'ALL' || String(s.employee_id) === String(filterEmployeeId);
+    return matchBulan && matchTahun && matchOutlet && matchEmployee;
   });
   // ── Pagination ──
   const indexOfLastRow = currentPage * 10;
@@ -2174,13 +2252,50 @@ export default function Payroll({ token, API_URL }) {
           display: 'flex', flexWrap: 'wrap', gap: '14px',
           alignItems: 'flex-end', marginBottom: '20px',
         }}>
+          {/* Filter Outlet */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '0.72rem', color: PALETTE.creamMuted, fontWeight: 700, textTransform: 'uppercase' }}>Filter Outlet</label>
+            <select
+              value={filterOutlet}
+              onChange={handleSlipsOutletChange}
+              style={{ height: '40px', padding: '0 12px', background: PALETTE.bgMain, border: `1px solid ${PALETTE.accent}`, borderRadius: '8px', color: PALETTE.cream, fontSize: '0.85rem', minWidth: '160px', outline: 'none' }}
+              disabled={availableOutlets.length === 0}
+            >
+              <option value="">{availableOutlets.length === 0 ? '— Outlet Kosong —' : '— Semua Outlet —'}</option>
+              {availableOutlets.map((o, i) => <option key={i} value={o}>{o}</option>)}
+            </select>
+          </div>
+
+          {/* Filter Karyawan (Cascade) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '220px' }}>
+            <label style={{ fontSize: '0.72rem', color: PALETTE.creamMuted, fontWeight: 700, textTransform: 'uppercase' }}>Filter Karyawan</label>
+            <select
+              value={filterEmployeeId}
+              onChange={e => {
+                setFilterEmployeeId(e.target.value);
+                setCurrentPage(1);
+              }}
+              style={{ height: '40px', padding: '0 12px', background: PALETTE.bgMain, border: `1px solid ${PALETTE.accent}`, borderRadius: '8px', color: PALETTE.cream, fontSize: '0.85rem', width: '100%', outline: 'none' }}
+            >
+              <option value="ALL">Semua Karyawan</option>
+              {filteredEmployeesForDropdown.map((emp, i) => (
+                <option key={i} value={emp.id || emp.employee_id}>
+                  {toTitleCase(emp.full_name || emp.nama)} ({emp.employee_id || emp.id})
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Filter Bulan */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label style={{ fontSize: '0.72rem', color: PALETTE.creamMuted, fontWeight: 700, textTransform: 'uppercase' }}>Filter Bulan</label>
             <select
               value={filterBulan}
-              onChange={e => setFilterBulan(Number(e.target.value))}
-              style={{ height: '40px', padding: '0 12px', background: PALETTE.bgMain, border: `1px solid ${PALETTE.accent}`, borderRadius: '8px', color: PALETTE.cream, fontSize: '0.85rem', minWidth: '140px' }}
+              onChange={e => {
+                setFilterBulan(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              style={{ height: '40px', padding: '0 12px', background: PALETTE.bgMain, border: `1px solid ${PALETTE.accent}`, borderRadius: '8px', color: PALETTE.cream, fontSize: '0.85rem', minWidth: '140px', outline: 'none' }}
             >
               {BULAN.map((b, i) => <option key={i} value={i + 1}>{b}</option>)}
             </select>
@@ -2191,44 +2306,14 @@ export default function Payroll({ token, API_URL }) {
             <label style={{ fontSize: '0.72rem', color: PALETTE.creamMuted, fontWeight: 700, textTransform: 'uppercase' }}>Filter Tahun</label>
             <select
               value={filterTahun}
-              onChange={e => setFilterTahun(Number(e.target.value))}
-              style={{ height: '40px', padding: '0 12px', background: PALETTE.bgMain, border: `1px solid ${PALETTE.accent}`, borderRadius: '8px', color: PALETTE.cream, fontSize: '0.85rem', minWidth: '100px' }}
+              onChange={e => {
+                setFilterTahun(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              style={{ height: '40px', padding: '0 12px', background: PALETTE.bgMain, border: `1px solid ${PALETTE.accent}`, borderRadius: '8px', color: PALETTE.cream, fontSize: '0.85rem', minWidth: '100px', outline: 'none' }}
             >
               {TAHUN.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
-          </div>
-
-          {/* Filter Outlet */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '0.72rem', color: PALETTE.creamMuted, fontWeight: 700, textTransform: 'uppercase' }}>Filter Outlet</label>
-            <select
-              value={filterOutlet}
-              onChange={e => setFilterOutlet(e.target.value)}
-              style={{ height: '40px', padding: '0 12px', background: PALETTE.bgMain, border: `1px solid ${PALETTE.accent}`, borderRadius: '8px', color: PALETTE.cream, fontSize: '0.85rem', minWidth: '160px' }}
-              disabled={availableOutlets.length === 0}
-            >
-              <option value="">{availableOutlets.length === 0 ? '— Outlet Kosong —' : '— Semua Outlet —'}</option>
-              {availableOutlets.map((o, i) => <option key={i} value={o}>{o}</option>)}
-            </select>
-          </div>
-
-          {/* Search nama */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '180px' }}>
-            <label style={{ fontSize: '0.72rem', color: PALETTE.creamMuted, fontWeight: 700, textTransform: 'uppercase' }}>Cari Nama</label>
-            <div style={{ position: 'relative' }}>
-              <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: PALETTE.creamMuted }} />
-              <input
-                type="text"
-                placeholder="Ketik nama karyawan..."
-                value={searchName}
-                onChange={e => setSearchName(e.target.value)}
-                style={{
-                  width: '100%', height: '40px', paddingLeft: '34px',
-                  background: PALETTE.bgMain, border: `1px solid ${PALETTE.accent}`,
-                  borderRadius: '8px', color: PALETTE.cream, fontSize: '0.85rem',
-                }}
-              />
-            </div>
           </div>
 
           {/* Column filter toggle */}
@@ -2266,6 +2351,24 @@ export default function Payroll({ token, API_URL }) {
               </div>
             )}
           </div>
+
+          {/* Tombol PDF */}
+          <button
+            onClick={handleDownloadPDF}
+            style={{
+              height: '40px', padding: '0 18px', background: '#3b82f6',
+              border: 'none', borderRadius: '8px', color: '#ffffff',
+              fontSize: '0.85rem', fontWeight: 800, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: '6px',
+              alignSelf: 'flex-end',
+              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.2)',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#2563eb'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#3b82f6'; e.currentTarget.style.transform = 'none'; }}
+          >
+            📄 UNDUH PDF
+          </button>
 
           {/* Tombol tambah */}
           <button

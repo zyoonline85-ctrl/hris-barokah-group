@@ -35,10 +35,10 @@ export default function SopPage({ token, API_URL }) {
   
   const [warningModal] = useState({ isOpen: false, message: '', onConfirm: null });
 
-  // Silent redirect on auth error (tidak ada popup warning)
+  // Auth warning disabled per user request — no session expiry redirect
   const showWarning = (message) => {
     console.warn('[SOP Auth]', message);
-    setTimeout(() => { window.location.href = '/login'; }, 300);
+    // Redirect dihapus atas permintaan pengguna
   };
 
 

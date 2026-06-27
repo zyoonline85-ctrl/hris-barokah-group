@@ -593,6 +593,15 @@ const seedInitialPolicies = () => {
         status: 'ACTIVE',
         created_at: new Date().toISOString(),
       },
+      {
+        id: 'seed-pol-004',
+        nama_aturan: 'Kebijakan Reaktivasi Karyawan',
+        outlets: allOutlets,
+        all_outlets: true,
+        deskripsi: 'Apabila karyawan telah dinonaktifkan, maka dapat diaktifkan kembali minimal 3 bulan dari tanggal dinonaktifkan.',
+        status: 'ACTIVE',
+        created_at: new Date().toISOString(),
+      },
     ];
   }
 
@@ -904,7 +913,7 @@ const seedInitialPolicies = () => {
       nama_aturan: 'Reaktivasi Karyawan Nonaktif',
       outlets: targetAllOutlets,
       all_outlets: true,
-      deskripsi: 'Karyawan yang telah dinonaktifkan dapat diaktifkan kembali minimal 3 (tiga) bulan terhitung sejak tanggal dinonaktifkan.',
+      deskripsi: 'Apabila karyawan telah dinonaktifkan, maka dapat diaktifkan kembali minimal 3 bulan dari tanggal dinonaktifkan.',
       status: 'ACTIVE',
       created_at: new Date().toISOString(),
     },

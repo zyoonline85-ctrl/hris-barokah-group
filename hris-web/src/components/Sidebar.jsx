@@ -9,7 +9,7 @@ export default function Sidebar({ activeTab, setActiveTab, onLogout, user, userP
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard Utama', icon: LayoutDashboard },
     { id: 'employees', label: 'Kelola Karyawan', icon: Users },
-    { id: 'attendances', label: 'Log Kehadiran', icon: Calendar },
+    { id: 'attendances', label: 'Kehadiran Karyawan', icon: Calendar },
     { id: 'leaves', label: 'Pusat Pengajuan', icon: ShieldAlert },
     { id: 'payroll', label: 'Payroll', icon: FileText },
     { id: 'contracts', label: 'Surat Penugasan', icon: FileText },

@@ -1786,6 +1786,19 @@ export default function Employees({ token, API_URL, userPermissions, user }) {
       return;
     }
     const newStatus = emp.employee_status === 'active' ? 'inactive' : 'active';
+
+    // Validasi reaktivasi: minimal 3 bulan sejak dinonaktifkan
+    if (newStatus === 'active' && emp.end_working_date) {
+      const deactivationDate = new Date(emp.end_working_date);
+      const now = new Date();
+      const diffMs = now.getTime() - deactivationDate.getTime();
+      const diffMonths = diffMs / (1000 * 60 * 60 * 24 * 30.44); // approximate months
+      if (diffMonths < 3) {
+        showError("Karyawan baru bisa diaktifkan kembali minimal 3 bulan setelah dinonaktifkan.");
+        return;
+      }
+    }
+
     const confirmMsg = newStatus === 'inactive'
       ? `Apakah Anda yakin ingin menonaktifkan karyawan ${toTitleCase(emp.full_name)}?`
       : `Apakah Anda yakin ingin mengaktifkan kembali karyawan ${toTitleCase(emp.full_name)}?`;

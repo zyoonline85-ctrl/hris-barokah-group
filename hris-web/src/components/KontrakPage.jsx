@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Plus, Search, Filter, CheckCircle, AlertCircle, Calendar, Download, Send, Trash2, ArrowLeft, ArrowRight, User } from 'lucide-react';
 import { useHRIS } from '../context/HRISContext';
+import jsPDF from 'jspdf';
 
 
 export default function KontrakPage({ token, API_URL }) {
@@ -28,6 +29,7 @@ export default function KontrakPage({ token, API_URL }) {
   const [jenisKontrak, setJenisKontrak] = useState('Kontrak 1 Tahun');
   const [employeeId, setEmployeeId] = useState('');
   const [gajiPokok, setGajiPokok] = useState(1000000);
+  const [editingContractId, setEditingContractId] = useState(null);
   
   // Auto-calculated fields
   const [nomorSurat, setNomorSurat] = useState('');
@@ -369,6 +371,37 @@ export default function KontrakPage({ token, API_URL }) {
     setIsSubmitting(true);
     const targetEmp = employees.find(e => String(e.id) === String(employeeId));
     
+    if (editingContractId) {
+      const updated = contracts.map(c => {
+        if (c.id === editingContractId) {
+          return {
+            ...c,
+            employee_id: parseInt(employeeId, 10),
+            nama_karyawan: targetEmp ? targetEmp.full_name : 'Karyawan',
+            outlet: targetEmp ? targetEmp.outlet : 'CABANG UTAMA',
+            jenis_kontrak: jenisKontrak,
+            gaji_pokok: parseFloat(gajiPokok),
+            uang_makan: uangMakan,
+            uang_lembur: uangLembur,
+            tunjangan_lama_bekerja: tunjanganLamaBekerja,
+            tunjangan_keluarga: tunjanganKeluarga,
+            tanggal_pembuatan: tanggalPembuatan,
+            tanggal_selesai: tanggalSelesai,
+          };
+        }
+        return c;
+      });
+      setContracts(updated);
+      localStorage.setItem('contract_ledger', JSON.stringify(updated));
+      setShowModal(false);
+      setShowPreviewModal(false);
+      resetContractForm();
+      setEditingContractId(null);
+      showToast('success', 'Kontrak Kerja Digital Berhasil Diperbarui!');
+      setIsSubmitting(false);
+      return;
+    }
+    
     const payload = {
       employee_id: parseInt(employeeId, 10),
       jenis_kontrak: jenisKontrak,
@@ -541,16 +574,202 @@ export default function KontrakPage({ token, API_URL }) {
     }
   };
 
+  const toTitleCase = (str) => {
+    if (!str) return '';
+    return str.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  };
+
   const handleSendKontrak = (c) => {
     setSendingContracts(prev => ({ ...prev, [c.id]: true }));
     setTimeout(() => {
-      showToast('success', `Kontrak ${c.nomor_surat} berhasil dikirimkan ke kotak masuk karyawan!`);
+      const updated = contracts.map(item => 
+        item.id === c.id ? { ...item, status_persetujuan: 'TERKIRIM' } : item
+      );
+      setContracts(updated);
+      localStorage.setItem('contract_ledger', JSON.stringify(updated));
+      showToast('success', `🚀 Kontrak ${c.nomor_surat} berhasil dikirimkan ke kotak masuk karyawan!`);
       setSendingContracts(prev => ({ ...prev, [c.id]: false }));
     }, 1200);
   };
 
+  const handleSimulateStatus = (c, nextStatus) => {
+    const updated = contracts.map(item => 
+      item.id === c.id ? { ...item, status_persetujuan: nextStatus } : item
+    );
+    setContracts(updated);
+    localStorage.setItem('contract_ledger', JSON.stringify(updated));
+    showToast('success', `🔄 Status kontrak ${c.nomor_surat} diperbarui menjadi: ${nextStatus}`);
+  };
+
+  const openEditModal = (c) => {
+    setEditingContractId(c.id);
+    setEmployeeId(c.employee_id);
+    setJenisKontrak(c.jenis_kontrak);
+    setGajiPokok(c.gaji_pokok);
+    setNikKaryawan(c.nik_karyawan || '');
+    setStatusKaryawan(c.status_karyawan || 'Karyawan Kontrak');
+    setUangLembur(c.uang_lembur || 7000);
+    setTunjanganLamaBekerja(c.tunjangan_lama_bekerja || 0);
+    setTunjanganKeluarga(c.tunjangan_keluarga || 0);
+    setTanggalPembuatan(c.tanggal_pembuatan);
+    setTanggalSelesai(c.tanggal_selesai || '');
+    setShowModal(true);
+  };
+
+  const handleDeleteContract = (id) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Hapus Dokumen?',
+      message: 'Apakah Anda yakin ingin menghapus dokumen surat penugasan ini secara permanen?',
+      confirmText: 'YA, HAPUS',
+      cancelText: 'BATAL',
+      onConfirm: async () => {
+        try {
+          await fetch(`${API_URL}/contracts/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+        } catch (e) {}
+        const updated = contracts.filter(c => c.id !== id);
+        setContracts(updated);
+        localStorage.setItem('contract_ledger', JSON.stringify(updated));
+        showToast('success', 'Dokumen berhasil dihapus.');
+      }
+    });
+  };
+
   const handleDownloadPDF = (c) => {
-    window.open(`${API_URL}/contracts/${c.id}/pdf`, '_blank');
+    try {
+      const doc = new jsPDF();
+      
+      // Page 1 Border & Page design
+      doc.rect(5, 5, 200, 287);
+      
+      // Header
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.text('BAROKAH GRUP', 105, 20, { align: 'center' });
+      doc.setFontSize(10);
+      doc.setFont('Helvetica', 'normal');
+      doc.text('Ruko Abs Center, Blok A No. 12, Medan', 105, 25, { align: 'center' });
+      doc.text('Email: hrd@barokahgrup.com | Telp: (061) 1234567', 105, 30, { align: 'center' });
+      
+      doc.line(15, 35, 195, 35);
+      doc.line(15, 36, 195, 36);
+      
+      // Document Title
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.text('SURAT PERJANJIAN KERJA (SPK)', 105, 48, { align: 'center' });
+      doc.setFontSize(10);
+      doc.text(`Nomor: ${c.nomor_surat}`, 105, 53, { align: 'center' });
+      
+      doc.setFont('Helvetica', 'normal');
+      doc.text('Yang bertandatangan di bawah ini:', 20, 65);
+      
+      // Pihak Pertama
+      doc.text('1. Pihak Pertama (Perusahaan):', 20, 72);
+      doc.text('Nama', 30, 78);
+      doc.text(': Harry Setiawan', 70, 78);
+      doc.text('Jabatan', 30, 83);
+      doc.text(': General Manager', 70, 83);
+      doc.text('Alamat', 30, 88);
+      doc.text(': Kantor Pusat Barokah Grup, Medan', 70, 88);
+      
+      // Pihak Kedua
+      doc.text('2. Pihak Kedua (Karyawan):', 20, 98);
+      doc.text('Nama Karyawan', 30, 104);
+      doc.text(`: ${toTitleCase(c.nama_karyawan)}`, 70, 104);
+      doc.text('NIK / KTP', 30, 109);
+      doc.text(`: ${c.nik_karyawan || '-'}`, 70, 109);
+      doc.text('Jabatan / Outlet', 30, 114);
+      doc.text(`: ${toTitleCase(c.jabatan || 'Karyawan')} / ${c.outlet || 'CABANG UTAMA'}`, 70, 114);
+      
+      doc.text('Kedua belah pihak sepakat untuk mengikatkan diri dalam Perjanjian Kerja dengan ketentuan:', 20, 125);
+      
+      // Pasal-pasal Page 1
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Pasal 1: Ketentuan Umum & Ruang Lingkup', 20, 133);
+      doc.setFont('Helvetica', 'normal');
+      doc.text('Pihak Kedua bekerja sebagai karyawan di bawah arahan Pihak Pertama dan wajib mematuhi seluruh peraturan perusahaan serta SOP yang berlaku.', 20, 138, { maxWidth: 170 });
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Pasal 2: Masa Berlaku & Jenis Kontrak', 20, 150);
+      doc.setFont('Helvetica', 'normal');
+      doc.text(`Perjanjian kerja ini berlaku untuk jangka waktu tertentu terhitung mulai tanggal ${c.tanggal_pembuatan} sampai ${c.tanggal_selesai || '-'} (${c.jenis_kontrak}).`, 20, 155, { maxWidth: 170 });
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Pasal 3: Waktu Kerja & Kedisiplinan', 20, 167);
+      doc.setFont('Helvetica', 'normal');
+      doc.text('Pihak Kedua wajib menaati jam kerja yang ditetapkan, melakukan presensi dengan jujur, serta menjaga kedisiplinan dan nama baik perusahaan.', 20, 172, { maxWidth: 170 });
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Pasal 4: Gaji & Tunjangan', 20, 184);
+      doc.setFont('Helvetica', 'normal');
+      doc.text(`Pihak Kedua berhak menerima Gaji Pokok sebesar ${formatCurrency(c.gaji_pokok || 1000000)}/bulan, Uang Makan ${formatCurrency(c.uang_makan || 20000)}/hari kerja, Uang Lembur ${formatCurrency(c.uang_lembur || 7000)}/hari kerja, Tunjangan Lama Bekerja ${formatCurrency(c.tunjangan_lama_bekerja || 0)}, dan Tunjangan Keluarga ${formatCurrency(c.tunjangan_keluarga || 0)} sesuai ketentuan.`, 20, 189, { maxWidth: 170 });
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Pasal 5: Kewajiban Karyawan', 20, 206);
+      doc.setFont('Helvetica', 'normal');
+      doc.text('Pihak Kedua wajib menjalankan seluruh tugas pekerjaan dengan penuh tanggung jawab, memelihara aset perusahaan, serta melaporkan operasional secara jujur.', 20, 211, { maxWidth: 170 });
+      
+      // Page 2
+      doc.addPage();
+      doc.rect(5, 5, 200, 287);
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.text('SURAT PERJANJIAN KERJA (SPK)', 105, 20, { align: 'center' });
+      doc.setFontSize(10);
+      doc.text(`Nomor: ${c.nomor_surat} (Lanjutan)`, 105, 25, { align: 'center' });
+      doc.line(15, 30, 195, 30);
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Pasal 6: Kerahasiaan Perusahaan (NDA) & Resep', 20, 40);
+      doc.setFont('Helvetica', 'normal');
+      doc.text('Pihak Kedua wajib menjaga kerahasiaan resep masakan, formula rasa, data keuangan, dan rahasia dagang perusahaan. Pelanggaran terhadap NDA dikenakan denda sebesar Rp 25.000.000.', 20, 45, { maxWidth: 170 });
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Pasal 7: Pemutusan Hubungan Kerja (PHK)', 20, 59);
+      doc.setFont('Helvetica', 'normal');
+      doc.text('Pihak Pertama berhak melakukan Pemutusan Hubungan Kerja (PHK) apabila Pihak Kedua melakukan pelanggaran berat atau setelah mendapatkan Surat Peringatan (SP) I, II, dan III.', 20, 64, { maxWidth: 170 });
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Pasal 8: Penalti Keluar', 20, 78);
+      doc.setFont('Helvetica', 'normal');
+      doc.text('Apabila Pihak Kedua mengundurkan diri sebelum masa kontrak selesai (khususnya dalam 3 tahun setelah pelatihan berbayar), maka Pihak Kedua wajib membayar ganti rugi sebesar Rp 25.000.000 kepada Pihak Pertama.', 20, 83, { maxWidth: 170 });
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Pasal 9: Penyelesaian Perselisihan', 20, 97);
+      doc.setFont('Helvetica', 'normal');
+      doc.text('Segala perselisihan yang timbul dari perjanjian kerja ini akan diselesaikan secara kekeluargaan terlebih dahulu, dan apabila tidak tercapai kesepakatan akan diselesaikan melalui jalur hukum.', 20, 102, { maxWidth: 170 });
+      
+      // Signature Section Page 2
+      doc.text('Dibuat di Medan pada tanggal ' + c.tanggal_pembuatan, 20, 125);
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Pihak Pertama (Perusahaan)', 30, 137);
+      doc.text('Pihak Kedua (Karyawan)', 140, 137);
+      
+      doc.setFont('Helvetica', 'italic');
+      doc.text('[Signed Digital]', 35, 150);
+      doc.text(c.status_persetujuan === 'KONTRAK DITANDATANGANI' ? '[Signed Digital]' : '[Menunggu Signature]', 142, 150);
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Harry Setiawan', 30, 165);
+      doc.text(toTitleCase(c.nama_karyawan), 135, 165);
+      
+      doc.setFont('Helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text('General Manager', 30, 169);
+      doc.text('NIK: ' + (c.nik_karyawan || '-'), 135, 169);
+      
+      doc.save(`Kontrak_Kerja_${c.nama_karyawan.replace(/\s+/g, '_')}_${c.nomor_surat.replace(/\//g, '_')}.pdf`);
+      showToast('success', '📄 PDF Kontrak Kerja berhasil diunduh!');
+    } catch (err) {
+      console.error(err);
+      showToast('error', '❌ Gagal mengunduh PDF Kontrak.');
+    }
   };
 
   // Search and filter contracts
@@ -814,13 +1033,21 @@ export default function KontrakPage({ token, API_URL }) {
                         <td style={{ color: 'rgba(238, 238, 238, 0.5)' }}>{c.tanggal_pembuatan}</td>
                         {activeSubTab === 'kontrak' ? (
                           <td>
-                            {c.status_persetujuan === 'KONTRAK DITANDATANGANI' ? (
+                            {c.status_persetujuan === 'KONTRAK DITANDATANGANI' || c.status_persetujuan === 'DISETUJUI' ? (
                               <span className="badge" style={{ background: 'rgba(46, 204, 113, 0.15)', color: '#2ECC71', fontWeight: 700 }}>
-                                KONTRAK DITANDATANGANI
+                                DISETUJUI / SIGNED
+                              </span>
+                            ) : c.status_persetujuan === 'DIBACA' ? (
+                              <span className="badge" style={{ background: 'rgba(52, 152, 219, 0.15)', color: '#3498db', fontWeight: 700 }}>
+                                👁️ DIBACA
+                              </span>
+                            ) : c.status_persetujuan === 'TERKIRIM' ? (
+                              <span className="badge" style={{ background: 'rgba(243, 156, 18, 0.15)', color: '#F39C12', fontWeight: 700 }}>
+                                🚀 TERKIRIM
                               </span>
                             ) : (
-                              <span className="badge" style={{ background: 'rgba(243, 156, 18, 0.15)', color: '#F39C12', fontWeight: 700 }}>
-                                BELUM SIGN
+                              <span className="badge" style={{ background: 'rgba(100, 116, 139, 0.15)', color: '#64748b', fontWeight: 700 }}>
+                                📝 DRAFT
                               </span>
                             )}
                           </td>
@@ -831,7 +1058,7 @@ export default function KontrakPage({ token, API_URL }) {
                         )}
                         {activeSubTab === 'lain-lain' && (
                           <td>
-                            {c.status_persetujuan === 'KONTRAK DITANDATANGANI' ? (
+                            {c.status_persetujuan === 'KONTRAK DITANDATANGANI' || c.status_persetujuan === 'DISETUJUI' ? (
                               <span className="badge" style={{ background: 'rgba(46, 204, 113, 0.15)', color: '#2ECC71', fontWeight: 700 }}>
                                 TTD Diterima
                               </span>
@@ -843,9 +1070,9 @@ export default function KontrakPage({ token, API_URL }) {
                           </td>
                         )}
                         <td>
-                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
                             {/* Kirim Kontrak Button */}
-                            {c.status_persetujuan !== 'KONTRAK DITANDATANGANI' && (
+                            {(c.status_persetujuan === 'DRAFT' || c.status_persetujuan === 'BELUM SIGN' || !c.status_persetujuan) && (
                               <button
                                 onClick={() => handleSendKontrak(c)}
                                 className="btn-secondary"
@@ -859,40 +1086,105 @@ export default function KontrakPage({ token, API_URL }) {
                                   display: 'flex',
                                   alignItems: 'center',
                                   gap: '4px',
-                                  cursor: sendingContracts[c.id] ? 'not-allowed' : 'pointer'
+                                  cursor: 'pointer'
                                 }}
                               >
-                                {sendingContracts[c.id] ? (
-                                  <div className="spinner-mini" style={{ width: '12px', height: '12px', border: '2px solid transparent', borderTopColor: 'var(--text-main)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                                ) : (
-                                  <>
-                                    <Send size={12} />
-                                    <span>{activeSubTab === 'kontrak' ? 'Kirim Kontrak' : 'Kirim Surat'}</span>
-                                  </>
-                                )}
+                                <Send size={12} />
+                                <span>Kirim Kontrak</span>
+                              </button>
+                            )}
+
+                            {/* Simulasi Baca Button */}
+                            {c.status_persetujuan === 'TERKIRIM' && (
+                              <button
+                                onClick={() => handleSimulateStatus(c, 'DIBACA')}
+                                className="btn-secondary"
+                                style={{
+                                  background: 'rgba(52, 152, 219, 0.1)',
+                                  border: '1px solid rgba(52, 152, 219, 0.3)',
+                                  color: '#3498db',
+                                  padding: '5px 10px',
+                                  fontSize: '0.75rem',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <span>👁️ Simulasi Baca</span>
+                              </button>
+                            )}
+
+                            {/* Simulasi TTD Button */}
+                            {c.status_persetujuan === 'DIBACA' && (
+                              <button
+                                onClick={() => handleSimulateStatus(c, 'KONTRAK DITANDATANGANI')}
+                                className="btn-secondary"
+                                style={{
+                                  background: 'rgba(46, 204, 113, 0.1)',
+                                  border: '1px solid rgba(46, 204, 113, 0.3)',
+                                  color: '#2ECC71',
+                                  padding: '5px 10px',
+                                  fontSize: '0.75rem',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <span>✍️ Simulasi TTD</span>
                               </button>
                             )}
 
                             {/* Download PDF Button */}
+                            {(c.status_persetujuan === 'KONTRAK DITANDATANGANI' || c.status_persetujuan === 'DISETUJUI') && (
+                              <button
+                                onClick={() => handleDownloadPDF(c)}
+                                className="btn-primary"
+                                style={{
+                                  background: 'var(--text-main)',
+                                  color: '#000',
+                                  border: '1px solid var(--border-color)',
+                                  padding: '5px 12px',
+                                  fontSize: '0.75rem',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontWeight: 700
+                                }}
+                              >
+                                <Download size={12} />
+                                <span>📄 Download PDF</span>
+                              </button>
+                            )}
+
+                            {/* Edit Button */}
+                            {c.status_persetujuan !== 'KONTRAK DITANDATANGANI' && c.status_persetujuan !== 'DISETUJUI' && (
+                              <button
+                                onClick={() => openEditModal(c)}
+                                title="Edit Kontrak"
+                                style={{
+                                  width: '28px', height: '28px', background: 'rgba(243, 156, 18, 0.1)',
+                                  border: '1px solid rgba(243, 156, 18, 0.3)', borderRadius: '6px',
+                                  color: '#f39c12', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                }}
+                              >
+                                ✏️
+                              </button>
+                            )}
+
+                            {/* Delete Button */}
                             <button
-                              onClick={() => handleDownloadPDF(c)}
-                              disabled={c.status_persetujuan !== 'KONTRAK DITANDATANGANI'}
-                              className="btn-primary"
+                              onClick={() => handleDeleteContract(c.id)}
+                              title="Hapus Kontrak"
                               style={{
-                                background: c.status_persetujuan === 'KONTRAK DITANDATANGANI' ? 'var(--text-main)' : 'rgba(165, 182, 141, 0.05)',
-                                color: c.status_persetujuan === 'KONTRAK DITANDATANGANI' ? '#000' : 'rgba(165, 182, 141, 0.2)',
-                                border: '1px solid var(--border-color)',
-                                padding: '5px 12px',
-                                fontSize: '0.75rem',
-                                cursor: c.status_persetujuan === 'KONTRAK DITANDATANGANI' ? 'pointer' : 'not-allowed',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                fontWeight: 700
+                                width: '28px', height: '28px', background: 'rgba(231,76,60,0.1)',
+                                border: '1px solid rgba(231,76,60,0.3)', borderRadius: '6px',
+                                color: '#e74c3c', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
                               }}
                             >
-                              <Download size={12} />
-                              <span>📄 Download PDF</span>
+                              <Trash2 size={12} />
                             </button>
                           </div>
                         </td>
@@ -1249,20 +1541,25 @@ export default function KontrakPage({ token, API_URL }) {
 
             {/* Pasal-pasal Kontrak */}
             <div style={{ border: '1px solid var(--border-color)', borderRadius: '10px', padding: '16px', background: 'var(--bg-main)', marginBottom: '14px', fontSize: '0.78rem', lineHeight: '1.7', color: 'var(--text-main)', maxHeight: '280px', overflowY: 'auto' }}>
-              <p style={{ fontWeight: 800, fontSize: '0.85rem', marginBottom: '10px', textAlign: 'center' }}>ISI PERJANJIAN KERJA</p>
-              <p><strong>Pasal 1 \u2014 Ketentuan Umum</strong><br/>
-                Dengan ditandatanganinya perjanjian ini, Pihak Kedua telah mengetahui dan patuh terhadap peraturan perusahaan demi kepentingan bersama.</p>
-              <p style={{ marginTop: '8px' }}><strong>Pasal 2 \u2014 Penunjukan Sebagai Karyawan</strong><br/>
-                Pihak Pertama memberikan tanggung jawab sebagai karyawan di outlet {(() => { const emp = employees.find(e => String(e.id) === String(employeeId)); return emp ? emp.outlet : '-'; })()} aktif sejak {tanggalPembuatan} s/d {tanggalSelesai}.</p>
-              <p style={{ marginTop: '8px' }}><strong>Pasal 3 \u2014 Hak dan Kewajiban Pihak Pertama</strong><br/>
-                Pembayaran gaji, tunjangan, dan insentif; pelatihan sesuai kapasitas; pengawasan kinerja.</p>
-              <p style={{ marginTop: '8px' }}><strong>Pasal 4 \u2014 Hak dan Kewajiban Pihak Kedua</strong><br/>
-                Berhak atas: Gaji Pokok, Uang Makan, Uang Lembur, Tunjangan Lama Bekerja, Tunjangan Keluarga.<br/>
-                Wajib: melaksanakan SOP, menjaga kerahasiaan perusahaan (denda Rp25.000.000 jika dilanggar), bersedia ditempatkan di mana saja.</p>
-              <p style={{ marginTop: '8px' }}><strong>Pasal 5 \u2014 Kontrak Berakhir</strong><br/>
-                Berakhir karena durasi, pemutusan Pihak Pertama (setelah SP I/II/III), atau Pihak Kedua (wajib 1 bulan pemberitahuan; denda Rp25.000.000 jika keluar dalam 3 tahun setelah pelatihan berbayar).</p>
-              <p style={{ marginTop: '8px' }}><strong>Pasal 6 \u2014 Dan Lain-Lain</strong><br/>
-                Perjanjian mengikat tanpa paksaan. Perselisihan diselesaikan kekeluargaan atau melalui jalur hukum dengan surat ini sebagai acuan.</p>
+              <p style={{ fontWeight: 800, fontSize: '0.85rem', marginBottom: '10px', textAlign: 'center' }}>ISI PERJANJIAN KERJA (9 PASAL)</p>
+              <p><strong>Pasal 1 — Ketentuan Umum & Ruang Lingkup</strong><br/>
+                Pihak Kedua bekerja sebagai karyawan di bawah arahan Pihak Pertama dan wajib mematuhi seluruh peraturan perusahaan serta SOP yang berlaku.</p>
+              <p style={{ marginTop: '8px' }}><strong>Pasal 2 — Masa Berlaku & Jenis Kontrak</strong><br/>
+                Perjanjian kerja ini berlaku untuk jangka waktu tertentu terhitung mulai tanggal {tanggalPembuatan} sampai {tanggalSelesai || '-'} ({jenisKontrak}).</p>
+              <p style={{ marginTop: '8px' }}><strong>Pasal 3 — Waktu Kerja & Kedisiplinan</strong><br/>
+                Pihak Kedua wajib menaati jam kerja yang ditetapkan, melakukan presensi dengan jujur, serta menjaga kedisiplinan dan nama baik perusahaan.</p>
+              <p style={{ marginTop: '8px' }}><strong>Pasal 4 — Gaji & Tunjangan</strong><br/>
+                Pihak Kedua berhak menerima Gaji Pokok sebesar {formatCurrency(gajiPokok)}/bulan, Uang Makan {formatCurrency(uangMakan)}/hari kerja, Uang Lembur {formatCurrency(uangLembur)}/hari kerja, Tunjangan Lama Bekerja {formatCurrency(tunjanganLamaBekerja)}, dan Tunjangan Keluarga {formatCurrency(tunjanganKeluarga)} sesuai ketentuan.</p>
+              <p style={{ marginTop: '8px' }}><strong>Pasal 5 — Kewajiban Karyawan</strong><br/>
+                Pihak Kedua wajib menjalankan seluruh tugas pekerjaan dengan penuh tanggung jawab, memelihara aset perusahaan, serta melaporkan operasional secara jujur.</p>
+              <p style={{ marginTop: '8px' }}><strong>Pasal 6 — Kerahasiaan Perusahaan (NDA) & Resep</strong><br/>
+                Pihak Kedua wajib menjaga kerahasiaan resep masakan, formula rasa, data keuangan, dan rahasia dagang perusahaan. Pelanggaran terhadap NDA dikenakan denda sebesar Rp 25.000.000.</p>
+              <p style={{ marginTop: '8px' }}><strong>Pasal 7 — Pemutusan Hubungan Kerja (PHK)</strong><br/>
+                Pihak Pertama berhak melakukan Pemutusan Hubungan Kerja (PHK) apabila Pihak Kedua melakukan pelanggaran berat atau setelah mendapatkan Surat Peringatan (SP) I, II, dan III.</p>
+              <p style={{ marginTop: '8px' }}><strong>Pasal 8 — Penalti Keluar</strong><br/>
+                Apabila Pihak Kedua mengundurkan diri sebelum masa kontrak selesai (khususnya dalam 3 tahun setelah pelatihan berbayar), maka Pihak Kedua wajib membayar ganti rugi sebesar Rp 25.000.000 kepada Pihak Pertama.</p>
+              <p style={{ marginTop: '8px' }}><strong>Pasal 9 — Penyelesaian Perselisihan</strong><br/>
+                Segala perselisihan yang timbul dari perjanjian kerja ini akan diselesaikan secara kekeluargaan terlebih dahulu, dan apabila tidak tercapai kesepakatan akan diselesaikan melalui jalur hukum.</p>
               <div style={{ marginTop: '10px', padding: '8px 12px', background: 'rgba(59,130,246,0.06)', borderRadius: '8px', border: '1px solid rgba(59,130,246,0.2)', fontSize: '0.75rem' }}>
                 ⚠️ <strong>Pernyataan Digital:</strong> Perjanjian ini bersifat digital. Dengan menekan tombol OK, Pihak Kedua menyetujui seluruh isi kontrak ini.
               </div>

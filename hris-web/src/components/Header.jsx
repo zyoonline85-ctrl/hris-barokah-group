@@ -5,7 +5,7 @@ export default function Header({ activeTab, user, token, API_URL, setActiveTab, 
   const titles = {
     dashboard: 'Dasbor Analitik Utama',
     employees: 'Manajemen Data Karyawan',
-    attendances: 'Log Rekam Kehadiran',
+    attendances: 'Kehadiran Karyawan',
     leaves: 'Manajemen Cuti & Izin',
     payroll: 'Pemrosesan Slip Gaji (Payroll)',
     contracts: 'Manajemen Surat Penugasan',

@@ -2324,8 +2324,8 @@ const employeeCount = Math.max(0, totalAccounts - ownerCount - adminCount);
                   value: `${macroKaryawanAktif} Orang`,
                   sub: `${macroCutiPending} cuti pending`,
                   icon: '👷',
-                  color: '#00ADB5',
-                  glow: 'rgba(0,173,181,0.15)',
+                  color: 'var(--accent-primary)',
+                  glow: 'rgba(59, 130, 246, 0.15)',
                   tabTarget: 'employees'
                 },
                 {
@@ -2413,7 +2413,7 @@ const employeeCount = Math.max(0, totalAccounts - ownerCount - adminCount);
                       width: '4px',
                       height: '20px',
                       borderRadius: '2px',
-                      background: 'linear-gradient(180deg, #00ADB5, #00D8FF)'
+                      background: 'linear-gradient(180deg, var(--accent-primary), #60A5FA)'
                     }} />
                     <span style={{
                       fontSize: '0.72rem',
@@ -2427,14 +2427,14 @@ const employeeCount = Math.max(0, totalAccounts - ownerCount - adminCount);
                     <div style={{
                       flex: 1,
                       height: '1px',
-                      background: 'linear-gradient(to right, rgba(0,173,181,0.3), transparent)'
+                      background: 'linear-gradient(to right, rgba(59, 130, 246, 0.3), transparent)'
                     }} />
                     <span style={{
                       fontSize: '0.65rem',
                       color: 'var(--text-muted)',
                       fontWeight: 600,
-                      background: 'rgba(0,173,181,0.1)',
-                      border: '1px solid rgba(0,173,181,0.2)',
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      border: '1px solid rgba(59, 130, 246, 0.2)',
                       padding: '3px 10px',
                       borderRadius: '20px'
                     }}>
@@ -3086,7 +3086,7 @@ const employeeCount = Math.max(0, totalAccounts - ownerCount - adminCount);
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(15, 23, 42, 0.75)',
+          background: 'rgba(15, 23, 42, 0.4)',
           zIndex: 9999,
           display: 'flex',
           alignItems: 'center',
@@ -3095,19 +3095,19 @@ const employeeCount = Math.max(0, totalAccounts - ownerCount - adminCount);
           animation: 'fadeIn 0.2s ease-out'
         }}>
           <div style={{
-            background: '#393E46',
+            background: '#ffffff',
             border: '1px solid var(--border-color)',
             borderRadius: '16px',
             padding: '30px',
             maxWidth: '500px',
             width: '90%',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+            boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
             textAlign: 'center'
           }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#EEEEEE', marginBottom: '14px' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '14px' }}>
               KONFIRMASI FILTER
             </h3>
-            <p style={{ fontSize: '0.88rem', color: '#EEEEEE', marginBottom: '24px', lineHeight: '1.5' }}>
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.5' }}>
               Apakah Anda yakin ingin menyaring data berdasarkan rentang waktu dan outlet yang dipilih? Proses ini akan memperbarui seluruh grafik dan visual halaman.
             </p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
@@ -3158,7 +3158,7 @@ const employeeCount = Math.max(0, totalAccounts - ownerCount - adminCount);
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(15, 23, 42, 0.75)',
+          background: 'rgba(15, 23, 42, 0.4)',
           zIndex: 9999,
           display: 'flex',
           alignItems: 'center',
@@ -3167,19 +3167,19 @@ const employeeCount = Math.max(0, totalAccounts - ownerCount - adminCount);
           animation: 'fadeIn 0.2s ease-out'
         }}>
           <div style={{
-            background: '#393E46',
+            background: '#ffffff',
             border: '1px solid var(--border-color)',
             borderRadius: '16px',
             padding: '30px',
             maxWidth: '500px',
             width: '90%',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+            boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
             textAlign: 'center'
           }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#EEEEEE', marginBottom: '14px' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '14px' }}>
               KONFIRMASI RESET FILTER
             </h3>
-            <p style={{ fontSize: '0.88rem', color: '#EEEEEE', marginBottom: '24px', lineHeight: '1.5' }}>
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.5' }}>
               Apakah Anda yakin ingin mengembalikan seluruh pengaturan filter ke setelan awal (default)?
             </p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>

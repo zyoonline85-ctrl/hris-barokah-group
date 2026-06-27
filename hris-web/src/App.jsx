@@ -446,7 +446,7 @@ export default function App() {
       case 'employees':
         return <Employees token={token} API_URL={API_URL} userPermissions={userPermissions} user={user} theme={theme} />;
       case 'attendances':
-        return <Attendances token={token} API_URL={API_URL} userPermissions={userPermissions} />;
+        return <Attendances token={token} API_URL={API_URL} userPermissions={userPermissions} setActiveTab={setActiveTab} />;
       case 'leaves':
         return <Leaves token={token} API_URL={API_URL} userPermissions={userPermissions} user={user} />;
       case 'payroll':

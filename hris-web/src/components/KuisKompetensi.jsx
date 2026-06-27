@@ -639,6 +639,74 @@ export default function KuisKompetensi() {
   });
   const [quizResults, setQuizResults] = useState(() => lsGet('quiz_results', []));
   const [notifications, setNotifications] = useState(() => lsGet('hris_notifications', []));
+  const [surveys, setSurveys] = useState(() => {
+    const main = lsGet('hris_surveys', []);
+    if (main.length > 0) return main;
+    const defaultSurveys = [
+      {
+        id: 'srv-001',
+        title: 'Survey Kepuasan Kerja & Lingkungan Kerja Cabang',
+        target_divisi: 'Semua',
+        questions: [
+          'Seberapa puas Anda dengan lingkungan fisik tempat Anda bekerja?',
+          'Apakah peralatan kerja yang disediakan memadai untuk tugas Anda?',
+          'Bagaimana hubungan koordinasi Anda dengan kepala cabang?',
+          'Seberapa jelas pembagian tugas dan peran Anda sehari-hari?',
+          'Apakah Anda merasa durasi istirahat yang diberikan sudah adil?',
+          'Bagaimana penilaian Anda terhadap kebersihan outlet tempat Anda bekerja?',
+          'Seberapa baik komunikasi antar staf di outlet Anda?',
+          'Apakah Anda merasa dihargai oleh perusahaan atas kontribusi Anda?',
+          'Seberapa aman Anda merasa saat bekerja di outlet?',
+          'Seberapa besar motivasi Anda untuk terus bekerja di Barokah Grup?'
+        ],
+        status: 'terkirim',
+        created_at: new Date(Date.now() - 5 * 24 * 3600000).toISOString()
+      }
+    ];
+    localStorage.setItem('hris_surveys', JSON.stringify(defaultSurveys));
+    return defaultSurveys;
+  });
+  const [surveyResponses, setSurveyResponses] = useState(() => {
+    const resp = lsGet('hris_survey_responses', []);
+    if (resp.length > 0) return resp;
+    const defaultResponses = [
+      {
+        id: 'sr-001',
+        survey_id: 'srv-001',
+        survey_title: 'Survey Kepuasan Kerja & Lingkungan Kerja Cabang',
+        employee_id: 1,
+        employee_name: 'Budi Santoso',
+        outlet: 'AYAM PECAK 2001 SEAFOOD TEBING TINGGI',
+        answers: [5, 4, 5, 4, 3, 5, 4, 4, 5, 5],
+        read_status: 'read',
+        submitted_at: new Date(Date.now() - 4 * 24 * 3600000).toISOString()
+      },
+      {
+        id: 'sr-002',
+        survey_id: 'srv-001',
+        survey_title: 'Survey Kepuasan Kerja & Lingkungan Kerja Cabang',
+        employee_id: 2,
+        employee_name: 'Siti Rahma',
+        outlet: 'AYAM PECAK 2001 SEAFOOD KISARAN',
+        answers: [4, 4, 3, 5, 4, 4, 5, 3, 4, 4],
+        read_status: 'read',
+        submitted_at: new Date(Date.now() - 3 * 24 * 3600000).toISOString()
+      },
+      {
+        id: 'sr-003',
+        survey_id: 'srv-001',
+        survey_title: 'Survey Kepuasan Kerja & Lingkungan Kerja Cabang',
+        employee_id: 3,
+        employee_name: 'Agus Wijaya',
+        outlet: 'PECEL LELE PAK HAJI KISARAN',
+        answers: [3, 2, 4, 4, 3, 4, 3, 4, 5, 4],
+        read_status: 'read',
+        submitted_at: new Date(Date.now() - 2 * 24 * 3600000).toISOString()
+      }
+    ];
+    localStorage.setItem('hris_survey_responses', JSON.stringify(defaultResponses));
+    return defaultResponses;
+  });
 
   // ── Pagination
   const QUIZ_PAGE_SIZE = 10;
@@ -659,6 +727,14 @@ export default function KuisKompetensi() {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, danger: false });
+
+  // ── Survey State
+  const [showTambahSurveyModal, setShowTambahSurveyModal] = useState(false);
+  const [surveyFormTitle, setSurveyFormTitle] = useState('');
+  const [surveyFormDivisi, setSurveyFormDivisi] = useState('Semua');
+  const [surveyFormQuestions, setSurveyFormQuestions] = useState(Array(10).fill(''));
+  const [editingSurveyId, setEditingSurveyId] = useState(null);
+  const [selectedSurveyForResult, setSelectedSurveyForResult] = useState(null);
 
 
   // ── Derived
@@ -694,12 +770,26 @@ export default function KuisKompetensi() {
     lsSet('hris_notifications', data);
   }, []);
 
+  const saveSurveys = useCallback((data) => {
+    setSurveys(data);
+    lsSet('hris_surveys', data);
+    hrisDispatch({ type: 'SURVEYS_CHANGED' });
+  }, [hrisDispatch]);
+
+  const saveSurveyResponses = useCallback((data) => {
+    setSurveyResponses(data);
+    lsSet('hris_survey_responses', data);
+    hrisDispatch({ type: 'SURVEY_RESPONSES_CHANGED' });
+  }, [hrisDispatch]);
+
   // Listen to storage changes from simulator or mobile
   useEffect(() => {
     const h = (e) => {
       if (e.detail?.key === 'quiz_results') setQuizResults(lsGet('quiz_results', []));
       if (e.detail?.key === 'hris_notifications') setNotifications(lsGet('hris_notifications', []));
       if (e.detail?.key === 'quiz_bank') setQuizBank(lsGet('quiz_bank', []));
+      if (e.detail?.key === 'hris_surveys') setSurveys(lsGet('hris_surveys', []));
+      if (e.detail?.key === 'hris_survey_responses') setSurveyResponses(lsGet('hris_survey_responses', []));
       if (e.detail?.key === 'quiz_bank_generated') {
         // Merge generated quizzes into main bank
         const gen = lsGet('quiz_bank_generated', []);
@@ -743,6 +833,136 @@ export default function KuisKompetensi() {
       return 'https://api.barokahgroupindonesia.tech/api';
     }
     return `${window.location.protocol}//${window.location.host}/api`;
+  };
+
+  // ── Survey Helper Methods
+  const getResponsesCount = (surveyId) => {
+    return surveyResponses.filter(r => r.survey_id === surveyId).length;
+  };
+
+  const getSurveyStats = (survey) => {
+    const srvResps = surveyResponses.filter(r => r.survey_id === survey.id);
+    const totalResponses = srvResps.length;
+    const stats = survey.questions.map((qText, qIdx) => {
+      const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      srvResps.forEach(r => {
+        const score = r.answers[qIdx] || 3;
+        counts[score]++;
+      });
+      const avg = totalResponses > 0 
+        ? (srvResps.reduce((sum, r) => sum + (r.answers[qIdx] || 3), 0) / totalResponses).toFixed(1)
+        : '—';
+      return { qText, counts, avg };
+    });
+    return { stats, totalResponses };
+  };
+
+  // ── Survey Handlers
+  const handleOpenTambahSurvey = () => {
+    setEditingSurveyId(null);
+    setSurveyFormTitle('');
+    setSurveyFormDivisi('Semua');
+    setSurveyFormQuestions(Array(10).fill(''));
+    setShowTambahSurveyModal(true);
+  };
+
+  const handleOpenEditSurvey = (srv) => {
+    setEditingSurveyId(srv.id);
+    setSurveyFormTitle(srv.title);
+    setSurveyFormDivisi(srv.target_divisi);
+    setSurveyFormQuestions([...srv.questions]);
+    setShowTambahSurveyModal(true);
+  };
+
+  const handleSaveSurvey = () => {
+    if (!surveyFormTitle.trim()) {
+      alert('Judul survey harus diisi!');
+      return;
+    }
+    const emptyQ = surveyFormQuestions.some(q => !q.trim());
+    if (emptyQ) {
+      alert('Harap isi semua 10 pertanyaan survey!');
+      return;
+    }
+
+    if (editingSurveyId) {
+      const updated = surveys.map(s => s.id === editingSurveyId ? {
+        ...s,
+        title: surveyFormTitle,
+        target_divisi: surveyFormDivisi,
+        questions: [...surveyFormQuestions]
+      } : s);
+      saveSurveys(updated);
+      alert('Survey berhasil diperbarui!');
+    } else {
+      const newSrv = {
+        id: uid(),
+        title: surveyFormTitle,
+        target_divisi: surveyFormDivisi,
+        questions: [...surveyFormQuestions],
+        status: 'draft',
+        created_at: new Date().toISOString()
+      };
+      saveSurveys([...surveys, newSrv]);
+      alert('Survey baru berhasil dibuat (draft)!');
+    }
+    setShowTambahSurveyModal(false);
+  };
+
+  const handleDeleteSurvey = (srvId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: '🗑 Hapus Survey',
+      message: 'Apakah Anda yakin ingin menghapus survey ini? Semua respon terkait survey ini juga akan terhapus.',
+      danger: true,
+      onConfirm: () => {
+        const updatedSurveys = surveys.filter(s => s.id !== srvId);
+        saveSurveys(updatedSurveys);
+        const updatedResponses = surveyResponses.filter(r => r.survey_id !== srvId);
+        saveSurveyResponses(updatedResponses);
+        setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: null });
+        alert('Survey berhasil dihapus!');
+      }
+    });
+  };
+
+  const handleSendSurvey = (srv) => {
+    const targetEmps = srv.target_divisi === 'Semua'
+      ? activeEmployees
+      : activeEmployees.filter(e => e.position === srv.target_divisi);
+
+    if (!targetEmps.length) {
+      alert('Tidak ada karyawan aktif yang sesuai dengan divisi target survey ini.');
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: '🚀 Konfirmasi Pengiriman Survey',
+      message: `Survey "${srv.title}" akan dikirim ke ${targetEmps.length} karyawan aktif. Lanjutkan?`,
+      danger: false,
+      onConfirm: () => {
+        const updatedSurveys = surveys.map(s => s.id === srv.id ? { ...s, status: 'terkirim' } : s);
+        saveSurveys(updatedSurveys);
+        
+        const now = new Date().toISOString();
+        const newNotifs = [...notifications, ...targetEmps.map(emp => ({
+          id: uid(),
+          quiz_id: srv.id,
+          type: 'survey',
+          title: `Survey Baru: ${srv.title}`,
+          message: `Harap isi survey dari manajemen mengenai: ${srv.title}`,
+          employee_id: emp.id,
+          employee_name: emp.full_name,
+          read_status: 'unread',
+          created_at: now
+        }))];
+        saveNotifications(newNotifs);
+
+        setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: null });
+        alert(`Survey berhasil dikirim ke ${targetEmps.length} karyawan!`);
+      }
+    });
   };
 
   // ── Kirim Kuis ke Karyawan
@@ -1128,6 +1348,7 @@ export default function KuisKompetensi() {
         {[
           { id: 'kelola', label: '📚 Kelola & Buat Kuis' },
           { id: 'hasil', label: '📊 Hasil Kompetensi Karyawan' },
+          { id: 'survey', label: '📝 Survey Karyawan' },
         ].map(t => (
           <button key={t.id} className="tab-btn-kuis"
             onClick={() => setActiveTab(t.id)}
@@ -1383,7 +1604,195 @@ export default function KuisKompetensi() {
           </div>
         )}
 
+        {/* ──────── TAB 3: SURVEY KARYAWAN ──────── */}
+        {activeTab === 'survey' && (
+          <div className="kuis-card animate-fade-in">
+            {selectedSurveyForResult ? (() => {
+              const { stats, totalResponses } = getSurveyStats(selectedSurveyForResult);
+              return (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <div>
+                      <button onClick={() => setSelectedSurveyForResult(null)} style={{ background: 'transparent', border: 'none', color: C.cyan, cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '5px', padding: 0, marginBottom: '6px' }}>
+                        ← Kembali ke Daftar Survey
+                      </button>
+                      <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: C.text }}>Analisis Distribusi Jawaban Survey</h2>
+                      <p style={{ color: C.muted, fontSize: '0.82rem', marginTop: '2px' }}>
+                        {selectedSurveyForResult.title} (Target: {selectedSurveyForResult.target_divisi} · {totalResponses} Responden)
+                      </p>
+                    </div>
+                  </div>
+
+                  {totalResponses === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '60px 20px', background: C.surface, borderRadius: '16px', border: `1px dashed ${C.border}` }}>
+                      <Inbox size={40} color={C.muted} style={{ marginBottom: '12px' }} />
+                      <p style={{ color: C.text, fontWeight: 700, marginBottom: '4px' }}>Belum Ada Respon</p>
+                      <p style={{ color: C.muted, fontSize: '0.82rem' }}>Survey ini belum diisi oleh satu pun karyawan.</p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {stats.map((item, idx) => (
+                        <div key={idx} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: '12px', padding: '18px 20px' }}>
+                          <p style={{ fontWeight: 700, color: C.text, fontSize: '0.88rem', marginBottom: '14px' }}>
+                            {idx + 1}. {item.qText}
+                          </p>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {[5, 4, 3, 2, 1].map(score => {
+                              const count = item.counts[score] || 0;
+                              const pct = totalResponses > 0 ? Math.round((count / totalResponses) * 100) : 0;
+                              return (
+                                <div key={score} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.8rem' }}>
+                                  <span style={{ width: '60px', color: C.muted }}>Skor {score} ⭐</span>
+                                  <div style={{ flex: 1, height: '8px', background: C.bg, borderRadius: '4px', overflow: 'hidden' }}>
+                                    <div style={{ width: `${pct}%`, height: '100%', background: score >= 4 ? '#2ecc71' : score === 3 ? '#f1c40f' : '#e74c3c', borderRadius: '4px' }} />
+                                  </div>
+                                  <span style={{ width: '85px', color: C.text, textAlign: 'right', fontWeight: 600 }}>{pct}% ({count} org)</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div style={{ marginTop: '12px', borderTop: `1px dashed ${C.border}`, paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: C.muted }}>
+                            <span>Total Respon: {totalResponses}</span>
+                            <span>Rata-rata Skor: <strong style={{ color: C.cyan }}>{item.avg} / 5.0</strong></span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })() : (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: C.text }}>Kelola & Buat Survey Karyawan</h2>
+                    <p style={{ color: C.muted, fontSize: '0.82rem', marginTop: '2px' }}>
+                      Kumpulkan masukan dari karyawan Anda menggunakan survey 10 pertanyaan skala 1-5
+                    </p>
+                  </div>
+                  <Btn variant="primary" onClick={handleOpenTambahSurvey}>
+                    <Plus size={16} /> Buat Survey Baru
+                  </Btn>
+                </div>
+
+                {surveys.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '80px 20px', background: C.surface, borderRadius: '16px', border: `1px dashed ${C.border}` }}>
+                    <Inbox size={48} color={C.muted} style={{ marginBottom: '16px' }} />
+                    <p style={{ color: C.text, fontWeight: 700, marginBottom: '6px' }}>Belum Ada Survey</p>
+                    <p style={{ color: C.muted, fontSize: '0.84rem' }}>Klik "Buat Survey Baru" untuk membuat draft survey.</p>
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto', borderRadius: '14px', border: `1px solid ${C.border}` }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                      <thead>
+                        <tr style={{ background: C.surface }}>
+                          {['Judul Survey', 'Target Divisi', 'Jumlah Respon', 'Tanggal Dibuat', 'Status', 'Aksi'].map(h => (
+                            <th key={h} style={{ padding: '13px 16px', color: C.cyan, fontWeight: 700, textAlign: 'left', borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {surveys.map((srv) => (
+                          <tr key={srv.id} className="kuis-row" style={{ borderBottom: `1px solid ${C.border}`, transition: 'background 0.15s' }}>
+                            <td style={{ padding: '14px 16px', color: C.text, fontWeight: 600 }}>
+                              {srv.title}
+                            </td>
+                            <td style={{ padding: '14px 16px', color: C.muted }}>
+                              {srv.target_divisi}
+                            </td>
+                            <td style={{ padding: '14px 16px', color: C.text }}>
+                              <Badge label={`${getResponsesCount(srv.id)} Respon`} color={C.cyan} bg="rgba(0,173,181,0.08)" />
+                            </td>
+                            <td style={{ padding: '14px 16px', color: C.muted, fontSize: '0.78rem' }}>
+                              {new Date(srv.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </td>
+                            <td style={{ padding: '14px 16px' }}>
+                              {srv.status === 'terkirim'
+                                ? <Badge label="🚀 Terkirim" color={C.success} bg="rgba(78,205,196,0.12)" />
+                                : <Badge label="📝 Draft" color={C.warn} bg="rgba(245,166,35,0.12)" />}
+                            </td>
+                            <td style={{ padding: '14px 16px' }}>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                {srv.status !== 'terkirim' && (
+                                  <button title="Kirim ke Karyawan" onClick={() => handleSendSurvey(srv)} style={{ background: C.cyanDim, border: `1px solid ${C.cyanBorder}`, borderRadius: '8px', padding: '7px 12px', color: C.cyan, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    <Send size={13} /> Kirim
+                                  </button>
+                                )}
+                                <button title="Lihat Hasil Survey" onClick={() => setSelectedSurveyForResult(srv)} style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '8px', padding: '7px 12px', color: C.success, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                  <BarChart2 size={13} /> Hasil
+                                </button>
+                                <button title="Edit Survey" onClick={() => handleOpenEditSurvey(srv)} style={{ background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.25)', borderRadius: '8px', padding: '7px 12px', color: C.warn, cursor: 'pointer' }}>
+                                  <Edit2 size={13} />
+                                </button>
+                                <button title="Hapus Survey" onClick={() => handleDeleteSurvey(srv.id)} style={{ background: 'rgba(224,92,92,0.08)', border: '1px solid rgba(224,92,92,0.25)', borderRadius: '8px', padding: '7px 10px', color: C.danger, cursor: 'pointer' }}>
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
+
+
+      {/* ── TAMBAH SURVEY MODAL ── */}
+      {showTambahSurveyModal && (
+        <div className="modal-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2, 4, 10, 0.8)', zIndex: 1000 }}>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: '16px', padding: '24px', maxWidth: '640px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: C.text }}>
+                {editingSurveyId ? '📝 Edit Survey Karyawan' : '✨ Buat Survey Baru'}
+              </h2>
+              <button onClick={() => setShowTambahSurveyModal(false)} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: C.muted, marginBottom: '6px', fontWeight: 600 }}>Judul Survey</label>
+                <input type="text" className="input-field" value={surveyFormTitle} onChange={e => setSurveyFormTitle(e.target.value)} placeholder="Contoh: Survey Kepuasan Kerja & Evaluasi Fasilitas" style={{ width: '100%', padding: '10px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: '8px', color: C.text }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: C.muted, marginBottom: '6px', fontWeight: 600 }}>Target Divisi</label>
+                <select className="input-field" value={surveyFormDivisi} onChange={e => setSurveyFormDivisi(e.target.value)} style={{ width: '100%', padding: '10px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: '8px', color: C.text }}>
+                  <option value="Semua">Semua Divisi / Jabatan</option>
+                  {divisiOptions.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: C.muted, marginBottom: '8px', fontWeight: 600 }}>Daftar 10 Pertanyaan (Penilaian Skala 1-5)</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {surveyFormQuestions.map((q, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '0.8rem', color: C.muted, width: '24px' }}>#{idx + 1}</span>
+                      <input type="text" className="input-field" value={q} onChange={e => {
+                        const newQs = [...surveyFormQuestions];
+                        newQs[idx] = e.target.value;
+                        setSurveyFormQuestions(newQs);
+                      }} placeholder={`Pertanyaan ${idx + 1}...`} style={{ flex: 1, padding: '8px 12px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: '8px', color: C.text, fontSize: '0.82rem' }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                <button onClick={handleSaveSurvey} className="btn-primary" style={{ flex: 1, padding: '12px', background: C.cyan, color: C.bg, border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}>
+                  Simpan Survey
+                </button>
+                <button onClick={() => setShowTambahSurveyModal(false)} className="btn-secondary" style={{ flex: 1, padding: '12px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: '8px', color: C.text, cursor: 'pointer' }}>
+                  Batal
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* ── MODALS ── */}
       <TambahKuisModal
