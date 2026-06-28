@@ -1500,6 +1500,7 @@ export default function PenilaianKPI({ token, API_URL }) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
               {outletsList.map(o => {
                 const isSelected = lbSelectedOutlets.includes(o);
+                const cleanName = o === 'Semua Outlet' ? '🌐 Semua Outlet' : `📍 ${o.replace('AYAM PECAK 2001 SEAFOOD ', '').replace('PECEL LELE ', '')}`;
                 return (
                   <button
                     key={o}
@@ -1507,16 +1508,23 @@ export default function PenilaianKPI({ token, API_URL }) {
                     style={{
                       background: isSelected ? `${C.cyan}18` : C.surface,
                       border: `1.5px solid ${isSelected ? C.cyan : C.border}`,
-                      color: isSelected ? C.cyan : C.muted,
+                      color: isSelected ? C.cyan : C.text,
                       borderRadius: '8px',
-                      padding: '6px 14px',
+                      padding: '8px 16px',
                       cursor: 'pointer',
                       fontWeight: 700,
-                      fontSize: '0.8rem',
-                      transition: 'all 0.2s ease'
+                      fontSize: '0.78rem',
+                      transition: 'all 0.2s ease',
+                      boxShadow: isSelected ? `0 2px 8px ${C.cyan}25` : 'none'
+                    }}
+                    onMouseEnter={e => {
+                      if (!isSelected) e.currentTarget.style.borderColor = C.cyan;
+                    }}
+                    onMouseLeave={e => {
+                      if (!isSelected) e.currentTarget.style.borderColor = C.border;
                     }}
                   >
-                    {o === 'Semua Outlet' ? '🌐 Semua Outlet' : `📍 ${o}`}
+                    {cleanName}
                   </button>
                 );
               })}
