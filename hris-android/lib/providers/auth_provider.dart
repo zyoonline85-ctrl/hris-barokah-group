@@ -1016,9 +1016,9 @@ class AuthProvider extends ChangeNotifier {
     if (_token == null || _profile == null) return false;
     try {
       final res = await ApiClient.post('surveys/$surveyId/responses', {
-        'employeeId': _profile!.employee.id,
-        'employeeName': _profile!.employee.fullName ?? _profile!.employee.nama ?? '',
-        'outlet': _profile!.employee.outlet ?? '',
+        'employeeId': _profile!.employeeId ?? _profile!.id,
+        'employeeName': _profile!.fullName,
+        'outlet': _profile!.outlet ?? '',
         'answers': answers,
       }, token: _token);
       final data = jsonDecode(res.body);

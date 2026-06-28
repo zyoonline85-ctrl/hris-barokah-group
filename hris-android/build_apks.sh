@@ -2,8 +2,9 @@
 set -e
 
 # =====================================================
-# HRIS BAROKAH - Build Script (Updated)
-# Build kedua APK: Mobile Karyawan + Tablet Operasional
+# HRIS BAROKAH - Build Script v1.5 / v1.3
+# Build kedua APK: Mobile Karyawan v1.5 + Tablet Operasional v1.3
+# Perubahan: Fitur Survey Karyawan end-to-end
 # API URL: https://api.barokahgroupindonesia.tech/api
 # =====================================================
 
@@ -11,8 +12,8 @@ WORKSPACE_DIR="/Volumes/Macintosh HD - Data/Users/macair/hris-sistem"
 ANDROID_DIR="$WORKSPACE_DIR/hris-android"
 DEPLOY_DIR="$WORKSPACE_DIR/deploy-artifacts"
 ARTIFACT_DIR="/Users/macbookargun/.gemini/antigravity/brain/f24306c1-2e02-48bd-a9c4-d35f9a866597"
-MOBILE_VER="v1.3"
-TABLET_VER="v1.1"
+MOBILE_VER="v1.5"
+TABLET_VER="v1.3"
 
 # --- Environment Variables ---
 export ANDROID_HOME="$HOME/Library/Android/sdk"
@@ -25,16 +26,16 @@ mkdir -p "$ARTIFACT_DIR"
 
 cd "$ANDROID_DIR"
 
-echo "=== [HRIS Barokah Build] API Target: https://api.barokahgroupindonesia.tech/api ==="
+echo "=== [HRIS Barokah Build v1.5/v1.3] API Target: https://api.barokahgroupindonesia.tech/api ==="
 echo "=== Running Flutter Clean ==="
 flutter clean
 flutter pub get
 
 # ==========================================
-# 1. BUILD PHONE EDITION (Mobile Karyawan)
+# 1. BUILD PHONE EDITION (Mobile Karyawan v1.5)
 # ==========================================
 echo ""
-echo "=== [1/2] Building Mobile Karyawan (Phone Edition) ==="
+echo "=== [1/2] Building Mobile Karyawan v1.5 (Phone Edition) ==="
 sed -i '' 's/static bool isTabletEdition = true;/static bool isTabletEdition = false;/g' lib/config/api_client.dart 2>/dev/null || true
 sed -i '' 's/android:label="HRIS Employee (Tablet)"/android:label="HRIS Employee"/g' android/app/src/main/AndroidManifest.xml 2>/dev/null || true
 sed -i '' 's/android:label="HRIS Employee (Tablet Edition)"/android:label="HRIS Employee"/g' android/app/src/main/AndroidManifest.xml 2>/dev/null || true
@@ -56,10 +57,10 @@ else
 fi
 
 # ==========================================
-# 2. BUILD TABLET EDITION (Operasional)
+# 2. BUILD TABLET EDITION (Operasional v1.3)
 # ==========================================
 echo ""
-echo "=== [2/2] Building Tablet Operasional (Landscape Edition) ==="
+echo "=== [2/2] Building Tablet Operasional v1.3 (Landscape Edition) ==="
 sed -i '' 's/static bool isTabletEdition = false;/static bool isTabletEdition = true;/g' lib/config/api_client.dart 2>/dev/null || true
 sed -i '' 's/android:label="HRIS Employee"/android:label="HRIS Employee (Tablet)"/g' android/app/src/main/AndroidManifest.xml 2>/dev/null || true
 
@@ -91,8 +92,9 @@ echo ""
 echo "============================================"
 echo " ✅ HRIS Barokah APK Build Selesai!"
 echo "============================================"
-echo " Mobile Karyawan : $DEPLOY_DIR/BarokahGrup_Karyawan_Mobile_$MOBILE_VER.apk"
-echo " Tablet Operasional: $DEPLOY_DIR/BarokahGrup_Operasional_Tablet_$TABLET_VER.apk"
-echo " API URL          : https://api.barokahgroupindonesia.tech/api"
+echo " Mobile Karyawan    : $DEPLOY_DIR/BarokahGrup_Karyawan_Mobile_$MOBILE_VER.apk"
+echo " Tablet Operasional : $DEPLOY_DIR/BarokahGrup_Operasional_Tablet_$TABLET_VER.apk"
+echo " API URL            : https://api.barokahgroupindonesia.tech/api"
+echo " Versi              : pubspec $(grep '^version:' pubspec.yaml)"
 echo "============================================"
 ls -lh "$DEPLOY_DIR/"
