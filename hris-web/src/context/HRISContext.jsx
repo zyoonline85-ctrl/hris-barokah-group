@@ -262,16 +262,29 @@ export function HRISProvider({ children }) {
     } catch (e) {}
   }, []);
 
-  // Pembersihan local sync port 3001 (Dinonaktifkan demi kueri langsung ke database VPS)
-
-  // Sync with main backend (port 5000)
+  // Sync with main backend (port 5000) — only runs after user is logged in
   useEffect(() => {
-    if (!API_URL) return;
+    const token = sessionStorage.getItem('token');
+    if (!API_URL || !token || token.startsWith('local-')) return;
 
     const syncWithMainBackend = async () => {
+      const headers = { 'Authorization': `Bearer ${token}` };
+      const fetchWithTimeout = async (url, opts = {}) => {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 4000);
+        try {
+          const r = await originalFetch(url, { ...opts, signal: ctrl.signal });
+          clearTimeout(tid);
+          return r;
+        } catch (e) {
+          clearTimeout(tid);
+          throw e;
+        }
+      };
+
       try {
-        // 1. Fetch materials from main backend
-        const resMat = await fetch(`${API_URL}/training-media`);
+        // 1. Fetch training materials
+        const resMat = await fetchWithTimeout(`${API_URL}/training-media`);
         const jsonMat = await resMat.json();
         if (jsonMat.status === 'success' && jsonMat.materials) {
           const localMat = lsRead('hris_training_materials', []);
@@ -280,9 +293,11 @@ export function HRISProvider({ children }) {
             window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key: 'hris_training_materials', value: jsonMat.materials } }));
           }
         }
+      } catch (e) { /* silently ignore */ }
 
-        // 2. Fetch DISC results from main backend
-        const resDisc = await fetch(`${API_URL}/disc-results`);
+      try {
+        // 2. Fetch DISC results
+        const resDisc = await fetchWithTimeout(`${API_URL}/disc-results`);
         const jsonDisc = await resDisc.json();
         if (jsonDisc.status === 'success' && jsonDisc.results) {
           const localDisc = lsRead('hris_disc_results', []);
@@ -291,41 +306,28 @@ export function HRISProvider({ children }) {
             window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key: 'hris_disc_results', value: jsonDisc.results } }));
           }
         }
+      } catch (e) { /* silently ignore */ }
 
-        // Fetch credentials dari backend utama secara real-time
-        try {
-          const resCred = await fetch(`${API_URL}/credentials`);
-          const jsonCred = await resCred.json();
-          if (jsonCred.status === 'success' && jsonCred.data) {
-            const list = jsonCred.data;
-            const passwords = {};
-            const usernames = {};
-            const roles = {};
-            list.forEach(c => {
-              passwords[c.id] = c.password;
-              usernames[c.id] = c.username;
-              roles[c.id] = c.role;
-            });
-            
-            const localPass = lsRead('hris_user_passwords', {});
-            if (JSON.stringify(localPass) !== JSON.stringify(passwords)) {
-              lsWrite('hris_user_passwords', passwords);
-            }
-            const localUsernames = lsRead('hris_custom_usernames', {});
-            if (JSON.stringify(localUsernames) !== JSON.stringify(usernames)) {
-              lsWrite('hris_custom_usernames', usernames);
-            }
-            const localRoles = lsRead('hris_user_roles', {});
-            if (JSON.stringify(localRoles) !== JSON.stringify(roles)) {
-              lsWrite('hris_user_roles', roles);
-            }
-          }
-        } catch (err) {
-          console.error('[HRIS] Gagal mengambil data kredensial:', err.message);
+      try {
+        // 3. Fetch credentials
+        const resCred = await fetchWithTimeout(`${API_URL}/credentials`);
+        const jsonCred = await resCred.json();
+        if (jsonCred.status === 'success' && jsonCred.data) {
+          const list = jsonCred.data;
+          const passwords = {}, usernames = {}, roles = {};
+          list.forEach(c => { passwords[c.id] = c.password; usernames[c.id] = c.username; roles[c.id] = c.role; });
+          const localPass = lsRead('hris_user_passwords', {});
+          if (JSON.stringify(localPass) !== JSON.stringify(passwords)) lsWrite('hris_user_passwords', passwords);
+          const localUsernames = lsRead('hris_custom_usernames', {});
+          if (JSON.stringify(localUsernames) !== JSON.stringify(usernames)) lsWrite('hris_custom_usernames', usernames);
+          const localRoles = lsRead('hris_user_roles', {});
+          if (JSON.stringify(localRoles) !== JSON.stringify(roles)) lsWrite('hris_user_roles', roles);
         }
+      } catch (e) { /* silently ignore */ }
 
-        // 4. Fetch mobile slips from main backend
-        const resSlips = await fetch(`${API_URL}/payroll/mobile-slips`);
+      try {
+        // 4. Fetch mobile slips
+        const resSlips = await fetchWithTimeout(`${API_URL}/payroll/mobile-slips`);
         const jsonSlips = await resSlips.json();
         if (jsonSlips.status === 'success' && jsonSlips.data) {
           const localSlips = lsRead('hris_payroll_mobile_slips', []);
@@ -334,9 +336,11 @@ export function HRISProvider({ children }) {
             window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key: 'hris_payroll_mobile_slips', value: jsonSlips.data } }));
           }
         }
+      } catch (e) { /* silently ignore */ }
 
-        // 5. Fetch quizzes from main backend
-        const resQuizzes = await fetch(`${API_URL}/quizzes`);
+      try {
+        // 5. Fetch quizzes
+        const resQuizzes = await fetchWithTimeout(`${API_URL}/quizzes`);
         const jsonQuizzes = await resQuizzes.json();
         if (jsonQuizzes.status === 'success' && jsonQuizzes.data) {
           const localQuizzes = lsRead('quiz_bank', []);
@@ -345,9 +349,11 @@ export function HRISProvider({ children }) {
             window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key: 'quiz_bank', value: jsonQuizzes.data } }));
           }
         }
+      } catch (e) { /* silently ignore */ }
 
-        // 6. Fetch quiz attempts from main backend
-        const resAttempts = await fetch(`${API_URL}/quizzes/attempts`);
+      try {
+        // 6. Fetch quiz attempts
+        const resAttempts = await fetchWithTimeout(`${API_URL}/quizzes/attempts`);
         const jsonAttempts = await resAttempts.json();
         if (jsonAttempts.status === 'success' && jsonAttempts.data) {
           const localResults = lsRead('quiz_results', []);
@@ -356,17 +362,16 @@ export function HRISProvider({ children }) {
             window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key: 'quiz_results', value: jsonAttempts.data } }));
           }
         }
-      } catch (e) {
-        console.log('Main backend not running or unreachable on port 5000.');
-      }
+      } catch (e) { /* silently ignore */ }
     };
 
     syncWithMainBackend();
 
-    // Poll DISC results from main backend every 6 seconds
-    const interval = setInterval(syncWithMainBackend, 6000);
+    // Poll every 30 seconds (was 6s — too aggressive)
+    const interval = setInterval(syncWithMainBackend, 30000);
     return () => clearInterval(interval);
   }, [API_URL]);
+
 
   // Outbound push to main backend on changes
   useEffect(() => {

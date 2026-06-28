@@ -84,50 +84,45 @@ window.setHrisPayroll = (list) => {
 // Warm up cache immediately
 window.initHrisCache();
 
-// Persistent Network Layer: Intercept window.fetch to inject 15s timeout, Localtunnel Bypass headers, and 3-cycle auto-retry on transient failures.
+// Persistent Network Layer: Intercept window.fetch to inject 5s timeout and Localtunnel Bypass headers.
+// NOTE: Retry logic removed to prevent app freeze on startup (multiple simultaneous API calls).
 const originalFetch = window.fetch;
 window.fetch = async (url, options = {}) => {
-  options.headers = options.headers || {};
-  
-  if (typeof url === 'string' && (url.includes('barokahgrup') || url.includes('localtunnel') || url.includes('loca.lt') || url.includes('trycloudflare') || url.includes('127.0.0.1') || url.includes('localhost') || url.startsWith('/') || !url.startsWith('http'))) {
-    if (options.headers instanceof Headers) {
-      options.headers.set('Bypass-Tunnel-Reminder', 'true');
-      if (!options.headers.has('Content-Type')) {
-        options.headers.set('Content-Type', 'application/json');
-      }
-    } else {
+  // Only inject headers for our own API endpoints, not external resources
+  const isApiUrl = typeof url === 'string' && (
+    url.includes('barokahgroupindonesia.tech') ||
+    url.includes('barokahgrup') ||
+    url.includes('localtunnel') ||
+    url.includes('loca.lt') ||
+    url.includes('trycloudflare') ||
+    url.includes('127.0.0.1') ||
+    url.includes('localhost') ||
+    (url.startsWith('/') && !url.startsWith('//'))
+  );
+
+  if (isApiUrl) {
+    options = { ...options };
+    options.headers = options.headers ? { ...options.headers } : {};
+    if (!(options.headers instanceof Headers)) {
       options.headers['Bypass-Tunnel-Reminder'] = 'true';
-      if (!options.headers['Content-Type']) {
-        options.headers['Content-Type'] = 'application/json';
-      }
     }
   }
 
-  const maxRetries = 3;
-  const retryDelay = 2000;
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  // If caller already provided a signal, respect it; otherwise create a 5s timeout
+  if (!options.signal) {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 15000); // 15-second timeout
-    
+    const id = setTimeout(() => controller.abort(), 5000); // 5-second timeout
     try {
-      const response = await originalFetch(url, {
-        ...options,
-        signal: controller.signal
-      });
+      const response = await originalFetch(url, { ...options, signal: controller.signal });
       clearTimeout(id);
       return response;
     } catch (error) {
       clearTimeout(id);
-      const isTransient = error.name === 'AbortError' || error.message.includes('Failed to fetch') || error.message.includes('NetworkError');
-      if (isTransient && attempt < maxRetries) {
-        console.warn(`WebAdmin Network Retry (${attempt}/${maxRetries}) for: ${url}`);
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
-      } else {
-        throw error;
-      }
+      throw error;
     }
   }
+
+  return originalFetch(url, options);
 };
 
 createRoot(document.getElementById('root')).render(
