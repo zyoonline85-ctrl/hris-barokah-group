@@ -534,11 +534,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Selamat Datang,', style: TextStyle(color: textMuted, fontSize: 13)),
-                const SizedBox(height: 4),
+                Text(
+                  auth.dailyMotivation,
+                  style: const TextStyle(
+                    color: Color(0xFFEEEEEE),
+                    fontSize: 14,
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Divider(color: Color(0x1AEEEEEE), height: 1, thickness: 1),
+                const SizedBox(height: 12),
                 Text(
                   profile?.fullName ?? 'Karyawan',
-                  style: const TextStyle(color: Color(0xFFEEEEEE), fontSize: 22, fontWeight: FontWeight.bold),
+                  style: const TextStyle(color: Color(0xFFEEEEEE), fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -688,8 +698,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Expanded(
                       child: _buildGojekMenuItem(
-                        icon: Icons.inbox_outlined,
-                        label: 'Inbox',
+                        icon: Icons.assignment_outlined,
+                        label: 'Pengajuan',
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PusatPengajuanScreen())),
                       ),
                     ),

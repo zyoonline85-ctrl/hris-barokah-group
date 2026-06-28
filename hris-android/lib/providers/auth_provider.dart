@@ -17,6 +17,7 @@ class AuthProvider extends ChangeNotifier {
   List<SopRecord> _sopList = [];
   List<InformationRecord> _informations = [];
   List<DocumentationRecord> _documentationList = [];
+  String _dailyMotivation = 'Tetap semangat bekerja demi Barokah Grup!';
   List<String> _unacknowledgedLeaveNotifications = [];
   List<String> _leaveNotificationsLog = [];
   List<dynamic> _policies = [];
@@ -42,6 +43,7 @@ class AuthProvider extends ChangeNotifier {
         fetchQuizAttempts();
         fetchTodayAttendance();
         fetchAttendanceHistory();
+        fetchInformations();
       } else {
         timer.cancel();
       }
@@ -70,6 +72,7 @@ class AuthProvider extends ChangeNotifier {
   List<PayrollRecord> get payrollHistory => _payrollHistory;
   List<SopRecord> get sopList => _sopList;
   List<InformationRecord> get informations => _informations;
+  String get dailyMotivation => _dailyMotivation;
   List<DocumentationRecord> get documentationList => _documentationList;
   List<String> get unacknowledgedLeaveNotifications => _unacknowledgedLeaveNotifications;
   List<String> get leaveNotificationsLog => _leaveNotificationsLog;
@@ -363,7 +366,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> clockIn(double lat, double lng, {String? notes}) async {
+  Future<void> clockIn(double lat, double lng, {String? photoSelfie, String? notes}) async {
     _isLoading = true;
     _attendanceError = null;
     _attendanceSuccess = null;
@@ -374,6 +377,9 @@ class AuthProvider extends ChangeNotifier {
         'latitude': lat,
         'longitude': lng,
       };
+      if (photoSelfie != null && photoSelfie.isNotEmpty) {
+        payload['photo_selfie'] = photoSelfie;
+      }
       if (notes != null && notes.isNotEmpty) {
         payload['notes'] = notes;
       }
@@ -397,17 +403,22 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> clockOut(double lat, double lng) async {
+  Future<void> clockOut(double lat, double lng, {String? photoSelfie}) async {
     _isLoading = true;
     _attendanceError = null;
     _attendanceSuccess = null;
     notifyListeners();
 
     try {
-      final res = await ApiClient.post('attendance/clock-out', {
+      final Map<String, dynamic> payload = {
         'latitude': lat,
         'longitude': lng,
-      }, token: _token);
+      };
+      if (photoSelfie != null && photoSelfie.isNotEmpty) {
+        payload['photo_selfie'] = photoSelfie;
+      }
+
+      final res = await ApiClient.post('attendance/clock-out', payload, token: _token);
 
       final data = jsonDecode(res.body);
       _isLoading = false;
@@ -727,6 +738,9 @@ class AuthProvider extends ChangeNotifier {
       if (res.statusCode == 200 && data['status'] == 'success') {
         final List list = data['data'] ?? [];
         _informations = list.map((x) => InformationRecord.fromJson(x)).toList();
+        if (data['daily_motivation'] != null) {
+          _dailyMotivation = data['daily_motivation'].toString();
+        }
         notifyListeners();
       }
     } catch (e) {

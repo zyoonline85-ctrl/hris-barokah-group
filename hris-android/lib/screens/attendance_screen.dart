@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
 import '../providers/auth_provider.dart';
 import '../models/models.dart';
 import '../config/api_client.dart';
@@ -17,6 +20,107 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   String _locationSource = 'Kantor Sudirman (Simulasi)';
   final _notesController = TextEditingController();
   int _activeTab = 0; // 0 = Absensi GPS, 1 = Rekapan Istirahat
+  bool _isLoadingAbsen = false;
+
+  Future<bool> _handleLocationPermission() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Layanan lokasi dinonaktifkan. Silakan aktifkan GPS Anda.'),
+        backgroundColor: Colors.red,
+      ));
+      return false;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Izin lokasi ditolak.'),
+          backgroundColor: Colors.red,
+        ));
+        return false;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Izin lokasi ditolak permanen, tidak dapat meminta izin.'),
+        backgroundColor: Colors.red,
+      ));
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<void> _performAbsensi(AuthProvider auth, bool isClockIn) async {
+    final hasPermission = await _handleLocationPermission();
+    if (!hasPermission) return;
+
+    setState(() {
+      _isLoadingAbsen = true;
+    });
+
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.front,
+        maxWidth: 600,
+        imageQuality: 70,
+      );
+
+      if (image == null) {
+        setState(() {
+          _isLoadingAbsen = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('❌ Foto selfie wajib diambil untuk absensi.'),
+          backgroundColor: Colors.red,
+        ));
+        return;
+      }
+
+      final bytes = await image.readAsBytes();
+      final base64Photo = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+
+      if (isClockIn) {
+        await auth.clockIn(position.latitude, position.longitude, photoSelfie: base64Photo);
+      } else {
+        await auth.clockOut(position.latitude, position.longitude, photoSelfie: base64Photo);
+      }
+
+      if (auth.attendanceError != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('❌ ${auth.attendanceError}'),
+          backgroundColor: Colors.red,
+        ));
+      } else if (auth.attendanceSuccess != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('✅ ${auth.attendanceSuccess}'),
+          backgroundColor: Colors.green,
+        ));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('❌ Gagal memproses absensi: $e'),
+        backgroundColor: Colors.red,
+      ));
+    } finally {
+      setState(() {
+        _isLoadingAbsen = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -204,6 +308,163 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             style: const TextStyle(color: textMuted, fontSize: 13, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 16),
+          
+          // Clock-In / Clock-Out Control Panel
+          Container(
+            padding: const EdgeInsets.all(20.0),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFEEEEEE).withOpacity(0.05)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.fingerprint, color: accentColor, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Absensi Masuk / Pulang',
+                      style: TextStyle(color: Color(0xFFEEEEEE), fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (today == null || today.clockIn == null) ...[
+                  const Text(
+                    'Anda belum melakukan absensi masuk (Clock-In) hari ini.',
+                    style: TextStyle(color: textMuted, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      onPressed: _isLoadingAbsen
+                          ? null
+                          : () => _performAbsensi(auth, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: accentColor,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: _isLoadingAbsen
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Icon(Icons.camera_alt, color: Colors.white),
+                      label: Text(
+                        _isLoadingAbsen ? 'Memproses...' : 'CLOCK-IN (MASUK KERJA)',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ] else if (today.clockOut == null) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Jam Masuk', style: TextStyle(color: textMuted, fontSize: 11)),
+                          const SizedBox(height: 4),
+                          Text(
+                            today.clockIn!,
+                            style: const TextStyle(color: Color(0xFFEEEEEE), fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: success.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'Sedang Bekerja',
+                          style: TextStyle(color: success, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      onPressed: _isLoadingAbsen
+                          ? null
+                          : () => _performAbsensi(auth, false),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: warning,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: _isLoadingAbsen
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Icon(Icons.camera_alt, color: Colors.white),
+                      label: Text(
+                        _isLoadingAbsen ? 'Memproses...' : 'CLOCK-OUT (PULANG KERJA)',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Jam Masuk', style: TextStyle(color: textMuted, fontSize: 11)),
+                          const SizedBox(height: 4),
+                          Text(
+                            today.clockIn!,
+                            style: const TextStyle(color: Color(0xFFEEEEEE), fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Jam Keluar', style: TextStyle(color: textMuted, fontSize: 11)),
+                          const SizedBox(height: 4),
+                          Text(
+                            today.clockOut!,
+                            style: const TextStyle(color: Color(0xFFEEEEEE), fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: accentColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'Absensi Selesai',
+                          style: TextStyle(color: accentColor, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Center(
+                    child: Text(
+                      '🎉 Anda telah menyelesaikan absensi untuk hari ini.',
+                      style: TextStyle(color: success, fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
           
           if (history.isEmpty)
             Center(

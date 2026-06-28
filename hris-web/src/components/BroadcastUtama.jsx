@@ -387,6 +387,110 @@ export default function BroadcastUtama() {
   const [filterKategori, setFilterKategori] = useState('Semua');
   const [delConfirm, setDelConfirm] = useState(null); // broadcast id
 
+  const [activeSubTab, setActiveSubTab] = useState('broadcast');
+  const [motivationText, setMotivationText] = useState('');
+  const [isLoadingAI, setIsLoadingAI] = useState(false);
+  const [isSavingMotivation, setIsSavingMotivation] = useState(false);
+  const [aiTone, setAiTone] = useState('penuh semangat, inspiratif, dan ramah');
+  const [toastMessage, setToastMessage] = useState(null);
+
+  // Fetch current motivation on mount
+  useEffect(() => {
+    const fetchCurrentMotivation = async () => {
+      try {
+        const token = localStorage.getItem('hris_token') || '';
+        const response = await fetch(`${getApiUrl()}/informations`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const resJson = await response.json();
+          if (resJson.status === 'success' && resJson.daily_motivation) {
+            setMotivationText(resJson.daily_motivation);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch motivation:', err);
+      }
+    };
+    fetchCurrentMotivation();
+  }, []);
+
+  const handleGenerateAI = async () => {
+    setIsLoadingAI(true);
+    try {
+      const token = localStorage.getItem('hris_token') || '';
+      const response = await fetch(`${getApiUrl()}/informations/generate-motivation`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ tone: aiTone })
+      });
+      const data = await response.json();
+      if (response.ok && data.status === 'success') {
+        setMotivationText(data.motivation);
+        showToast('Berhasil generate sapaan motivasi!');
+      } else {
+        alert(data.message || 'Gagal generate motivasi.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Gagal memanggil API.');
+    } finally {
+      setIsLoadingAI(false);
+    }
+  };
+
+  const handleSaveMotivation = async () => {
+    if (!motivationText.trim()) {
+      alert('Teks sapaan motivasi tidak boleh kosong.');
+      return;
+    }
+    setIsSavingMotivation(true);
+    try {
+      const token = localStorage.getItem('hris_token') || '';
+      const response = await fetch(`${getApiUrl()}/informations/daily-motivation`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ motivation: motivationText.trim() })
+      });
+      const data = await response.json();
+      if (response.ok && data.status === 'success') {
+        showToast('Sapaan motivasi berhasil disimpan & dikirim ke APK!');
+        // dispatch event so mobile apps are notified
+        try {
+          await fetch(`${getApiUrl()}/v1/dispatch-event`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'broadcast',
+              targetOutlet: 'Semua Outlet',
+              targetJabatan: 'Semua Jabatan',
+              messageTitle: 'Sapaan Harian Baru',
+              content: motivationText.trim()
+            })
+          });
+        } catch (_) {}
+      } else {
+        alert(data.message || 'Gagal menyimpan.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Gagal memanggil API.');
+    } finally {
+      setIsSavingMotivation(false);
+    }
+  };
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
   // ── Derived options
   const allOutlets = [...new Set(activeEmployees.map(e => e.outlet).filter(Boolean))].sort();
   const allJabatan = [...new Set(activeEmployees.map(e => e.position).filter(Boolean))].sort();
@@ -713,8 +817,58 @@ export default function BroadcastUtama() {
 
       <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
 
-        {/* ═══ FORM SIARAN ═══ */}
-        <form onSubmit={handleSiarkan} className="bc-anim">
+        {/* ═══ TAB CONTROL ═══ */}
+        <div style={{ display: 'flex', gap: '12px', borderBottom: `1px solid ${C.border}`, paddingBottom: '12px' }}>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('broadcast')}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '8px',
+              border: 'none',
+              background: activeSubTab === 'broadcast' ? C.cyan : 'transparent',
+              color: activeSubTab === 'broadcast' ? '#222831' : C.muted,
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            Siaran & Push Notifikasi
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('sapaan')}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '8px',
+              border: 'none',
+              background: activeSubTab === 'sapaan' ? C.cyan : 'transparent',
+              color: activeSubTab === 'sapaan' ? '#222831' : C.muted,
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            Sapaan Harian (AI Motivation)
+          </button>
+        </div>
+
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div style={{
+            position: 'fixed', top: '24px', right: '24px', zIndex: 9999,
+            background: C.success, color: '#222831', padding: '12px 24px',
+            borderRadius: '8px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            animation: 'bcFadeIn 0.3s ease'
+          }}>
+            {toastMessage}
+          </div>
+        )}
+
+        {activeSubTab === 'broadcast' && (
+          <>
+            {/* ═══ FORM SIARAN ═══ */}
+            <form onSubmit={handleSiarkan} className="bc-anim">
           <div style={{
             background: C.surface, borderRadius: '20px',
             border: `1px solid ${C.border}`, overflow: 'hidden',
@@ -1056,6 +1210,134 @@ export default function BroadcastUtama() {
             Klik "Sim.Baca" untuk mensimulasikan respons karyawan membaca siaran
           </p>
         </div>
+          </>
+        )}
+
+        {activeSubTab === 'sapaan' && (
+          <div className="bc-anim" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{
+              background: C.surface, borderRadius: '20px',
+              border: `1px solid ${C.border}`, padding: '32px',
+              boxShadow: '0 4px 30px rgba(0,0,0,0.2)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                <div style={{
+                  background: 'rgba(0,173,181,0.1)', border: `1px solid ${C.cyanBorder}`,
+                  borderRadius: '12px', padding: '8px', color: C.cyan, display: 'flex',
+                }}>
+                  <Zap size={22} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: C.text }}>
+                    Sapaan & Motivasi Harian AI (Gemini)
+                  </h3>
+                  <p style={{ color: C.muted, fontSize: '0.8rem', marginTop: '3px' }}>
+                    Generate kalimat penyemangat harian untuk seluruh karyawan yang terpasang di layar utama aplikasi handphone & tablet.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '28px', marginTop: '28px' }}>
+                {/* Column 1: AI Prompt Guide & Controls */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: C.muted, marginBottom: '8px' }}>
+                      Pilih Nada Sapaan Motivasi
+                    </label>
+                    <select
+                      value={aiTone}
+                      onChange={(e) => setAiTone(e.target.value)}
+                      style={{
+                        width: '100%', background: C.bg, border: `1px solid ${C.border}`,
+                        borderRadius: '10px', padding: '11px 14px', color: C.text,
+                        fontSize: '0.88rem', cursor: 'pointer',
+                      }}
+                    >
+                      <option value="penuh semangat, inspiratif, dan ramah">Semangat Pagi & Ceria</option>
+                      <option value="disiplin, fokus pada pelayanan, dan profesional">Fokus Disiplin & Pelayanan</option>
+                      <option value="kerja keras, keberkahan, dan kejujuran">Kerja Keras & Keberkahan</option>
+                      <option value="kerjasama tim, kekeluargaan, dan sinergi bersama">Kerja Sama Tim & Sinergi</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleGenerateAI}
+                    disabled={isLoadingAI}
+                    style={{
+                      width: '100%', padding: '12px', background: 'linear-gradient(135deg, #00ADB5, #007a80)',
+                      color: '#222831', border: 'none', borderRadius: '10px', fontWeight: 800,
+                      cursor: isLoadingAI ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', gap: '8px', boxShadow: '0 4px 14px rgba(0,173,181,0.3)',
+                    }}
+                  >
+                    {isLoadingAI ? (
+                      <>
+                        <RefreshCw className="animate-spin" size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                        Generating Motivasi...
+                      </>
+                    ) : (
+                      <>
+                        <Zap size={16} />
+                        Generate dengan AI (Gemini)
+                      </>
+                    )}
+                  </button>
+
+                  <div style={{
+                    background: C.bg, border: `1px solid ${C.border}`,
+                    borderRadius: '12px', padding: '16px', fontSize: '0.78rem', color: C.muted,
+                  }}>
+                    <h5 style={{ color: C.cyan, fontWeight: 700, marginBottom: '6px' }}>💡 Tips Penggunaan</h5>
+                    <ul style={{ listStyleType: 'disc', paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <li>Generate sapaan yang berbeda setiap harinya untuk mengobarkan semangat staf Anda.</li>
+                      <li>Anda bisa mengedit manual kalimat hasil AI sebelum mengirimkannya ke APK.</li>
+                      <li>Karyawan akan melihat sapaan ini secara real-time di Welcome Card dashboard mobile mereka.</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Column 2: Editor Textarea */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: C.muted, marginBottom: '8px' }}>
+                      Teks Sapaan / Kutipan Motivasi Aktif
+                    </label>
+                    <textarea
+                      value={motivationText}
+                      onChange={(e) => setMotivationText(e.target.value)}
+                      placeholder="Tulis kalimat motivasi kerja di sini..."
+                      style={{
+                        width: '100%', height: '140px', background: C.bg, border: `1px solid ${C.border}`,
+                        borderRadius: '12px', padding: '16px', color: C.text, fontSize: '1rem',
+                        lineHeight: 1.5, resize: 'none',
+                      }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px', fontSize: '0.74rem', color: C.muted }}>
+                      {motivationText.length} karakter
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                    <button
+                      type="button"
+                      onClick={handleSaveMotivation}
+                      disabled={isSavingMotivation}
+                      style={{
+                        padding: '12px 28px', background: C.success, color: '#222831',
+                        border: 'none', borderRadius: '10px', fontWeight: 800,
+                        cursor: isSavingMotivation ? 'not-allowed' : 'pointer', display: 'flex',
+                        alignItems: 'center', gap: '8px', boxShadow: '0 4px 14px rgba(78,205,196,0.3)',
+                      }}
+                    >
+                      {isSavingMotivation ? 'Mengirim...' : 'Kirim & Update ke Mobile APK'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ═══ MODALS ═══ */}
