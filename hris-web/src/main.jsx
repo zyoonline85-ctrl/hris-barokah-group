@@ -86,7 +86,7 @@ window.initHrisCache();
 
 // Persistent Network Layer: Intercept window.fetch to inject 5s timeout and Localtunnel Bypass headers.
 // NOTE: Retry logic removed to prevent app freeze on startup (multiple simultaneous API calls).
-const originalFetch = window.fetch;
+const originalFetch = window.fetch.bind(window);
 window.fetch = async (url, options = {}) => {
   // Only inject headers for our own API endpoints, not external resources
   const isApiUrl = typeof url === 'string' && (

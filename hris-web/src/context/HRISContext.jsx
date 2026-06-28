@@ -25,10 +25,14 @@ const trackedKeys = new Set([
 
 const memoryStorage = {};
 
+let originalGetItem = null;
+let originalSetItem = null;
+let originalRemoveItem = null;
+
 if (typeof window !== 'undefined') {
-  const originalGetItem = localStorage.getItem.bind(localStorage);
-  const originalSetItem = localStorage.setItem.bind(localStorage);
-  const originalRemoveItem = localStorage.removeItem.bind(localStorage);
+  originalGetItem = localStorage.getItem.bind(localStorage);
+  originalSetItem = localStorage.setItem.bind(localStorage);
+  originalRemoveItem = localStorage.removeItem.bind(localStorage);
 
   // Initialize memoryStorage with existing values from actual localStorage
   trackedKeys.forEach(key => {
@@ -168,7 +172,11 @@ const lsWrite = (key, value) => {
       memoryStorage[key] = serialized;
       window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key, value } }));
     } else {
-      Object.getPrototypeOf(localStorage).setItem.call(localStorage, key, serialized);
+      if (originalSetItem) {
+        originalSetItem(key, serialized);
+      } else {
+        localStorage.setItem(key, serialized);
+      }
     }
   } catch (e) {
     console.error('[HRIS] lsWrite failed:', key, e);
@@ -289,7 +297,11 @@ export function HRISProvider({ children }) {
         if (jsonMat.status === 'success' && jsonMat.materials) {
           const localMat = lsRead('hris_training_materials', []);
           if (JSON.stringify(localMat) !== JSON.stringify(jsonMat.materials)) {
-            Object.getPrototypeOf(localStorage).setItem.call(localStorage, 'hris_training_materials', JSON.stringify(jsonMat.materials));
+            if (originalSetItem) {
+              originalSetItem('hris_training_materials', JSON.stringify(jsonMat.materials));
+            } else {
+              localStorage.setItem('hris_training_materials', JSON.stringify(jsonMat.materials));
+            }
             window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key: 'hris_training_materials', value: jsonMat.materials } }));
           }
         }
@@ -302,7 +314,11 @@ export function HRISProvider({ children }) {
         if (jsonDisc.status === 'success' && jsonDisc.results) {
           const localDisc = lsRead('hris_disc_results', []);
           if (JSON.stringify(localDisc) !== JSON.stringify(jsonDisc.results)) {
-            Object.getPrototypeOf(localStorage).setItem.call(localStorage, 'hris_disc_results', JSON.stringify(jsonDisc.results));
+            if (originalSetItem) {
+              originalSetItem('hris_disc_results', JSON.stringify(jsonDisc.results));
+            } else {
+              localStorage.setItem('hris_disc_results', JSON.stringify(jsonDisc.results));
+            }
             window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key: 'hris_disc_results', value: jsonDisc.results } }));
           }
         }
@@ -332,7 +348,11 @@ export function HRISProvider({ children }) {
         if (jsonSlips.status === 'success' && jsonSlips.data) {
           const localSlips = lsRead('hris_payroll_mobile_slips', []);
           if (JSON.stringify(localSlips) !== JSON.stringify(jsonSlips.data)) {
-            Object.getPrototypeOf(localStorage).setItem.call(localStorage, 'hris_payroll_mobile_slips', JSON.stringify(jsonSlips.data));
+            if (originalSetItem) {
+              originalSetItem('hris_payroll_mobile_slips', JSON.stringify(jsonSlips.data));
+            } else {
+              localStorage.setItem('hris_payroll_mobile_slips', JSON.stringify(jsonSlips.data));
+            }
             window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key: 'hris_payroll_mobile_slips', value: jsonSlips.data } }));
           }
         }
@@ -345,7 +365,11 @@ export function HRISProvider({ children }) {
         if (jsonQuizzes.status === 'success' && jsonQuizzes.data) {
           const localQuizzes = lsRead('quiz_bank', []);
           if (JSON.stringify(localQuizzes) !== JSON.stringify(jsonQuizzes.data)) {
-            Object.getPrototypeOf(localStorage).setItem.call(localStorage, 'quiz_bank', JSON.stringify(jsonQuizzes.data));
+            if (originalSetItem) {
+              originalSetItem('quiz_bank', JSON.stringify(jsonQuizzes.data));
+            } else {
+              localStorage.setItem('quiz_bank', JSON.stringify(jsonQuizzes.data));
+            }
             window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key: 'quiz_bank', value: jsonQuizzes.data } }));
           }
         }
@@ -358,7 +382,11 @@ export function HRISProvider({ children }) {
         if (jsonAttempts.status === 'success' && jsonAttempts.data) {
           const localResults = lsRead('quiz_results', []);
           if (JSON.stringify(localResults) !== JSON.stringify(jsonAttempts.data)) {
-            Object.getPrototypeOf(localStorage).setItem.call(localStorage, 'quiz_results', JSON.stringify(jsonAttempts.data));
+            if (originalSetItem) {
+              originalSetItem('quiz_results', JSON.stringify(jsonAttempts.data));
+            } else {
+              localStorage.setItem('quiz_results', JSON.stringify(jsonAttempts.data));
+            }
             window.dispatchEvent(new CustomEvent('hris:storage', { detail: { key: 'quiz_results', value: jsonAttempts.data } }));
           }
         }
