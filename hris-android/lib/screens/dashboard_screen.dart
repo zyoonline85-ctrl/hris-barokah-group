@@ -16,6 +16,7 @@ import 'sop_screen.dart';
 import 'attendance_screen.dart';
 import 'training_screen.dart';
 import 'information_screen.dart';
+import 'survey_list_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -719,9 +720,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     Expanded(
                       child: _buildGojekMenuItem(
-                        icon: Icons.description_outlined,
-                        label: 'Kontrak',
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InformationScreen(initialIndex: 3))),
+                        icon: Icons.poll_outlined,
+                        label: 'Survey',
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SurveyListScreen())),
                       ),
                     ),
                   ],

@@ -154,6 +154,43 @@ export async function initializeDatabase() {
       console.log('SUCCESS: Menambahkan kolom radius ke tabel outlets.');
     } catch (_) {}
 
+    // Pastikan tabel surveys ada
+    try {
+      await connection.execute(`
+        CREATE TABLE IF NOT EXISTS surveys (
+          id VARCHAR(50) PRIMARY KEY,
+          title VARCHAR(255) NOT NULL,
+          start_date DATE NOT NULL,
+          end_date DATE NOT NULL,
+          outlets TEXT NULL,
+          questions TEXT NOT NULL,
+          status VARCHAR(20) DEFAULT 'aktif',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+      console.log('SUCCESS: Membuat/memastikan tabel surveys.');
+    } catch (e) {
+      console.error('ERROR: Gagal membuat tabel surveys:', e.message);
+    }
+
+    // Pastikan tabel survey_responses ada
+    try {
+      await connection.execute(`
+        CREATE TABLE IF NOT EXISTS survey_responses (
+          id VARCHAR(50) PRIMARY KEY,
+          survey_id VARCHAR(50) NOT NULL,
+          employee_id INT NOT NULL,
+          employee_name VARCHAR(255) NOT NULL,
+          outlet VARCHAR(255) NULL,
+          answers TEXT NOT NULL,
+          submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+      console.log('SUCCESS: Membuat/memastikan tabel survey_responses.');
+    } catch (e) {
+      console.error('ERROR: Gagal membuat tabel survey_responses:', e.message);
+    }
+
     // Pastikan kunci gemini_api_key terdaftar di system_settings
     try {
       const [rows] = await connection.execute("SELECT * FROM system_settings WHERE `key` = 'gemini_api_key'");

@@ -824,6 +824,138 @@ class QuizAttemptRecord {
   }
 }
 
+class SurveyRecord {
+  final String id;
+  final String title;
+  final String startDate;
+  final String endDate;
+  final List<String> outlets;
+  final List<SurveyQuestion> questions;
+  final String status;
+  final bool hasCompleted;
+
+  SurveyRecord({
+    required this.id,
+    required this.title,
+    required this.startDate,
+    required this.endDate,
+    required this.outlets,
+    required this.questions,
+    required this.status,
+    required this.hasCompleted,
+  });
+
+  factory SurveyRecord.fromJson(Map<String, dynamic> json) {
+    List<SurveyQuestion> qs = [];
+    if (json['questions'] != null) {
+      final val = json['questions'];
+      if (val is List) {
+        qs = val.map((e) => SurveyQuestion.fromJson(e as Map<String, dynamic>)).toList();
+      } else if (val is String) {
+        try {
+          final List parsed = jsonDecode(val);
+          qs = parsed.map((e) => SurveyQuestion.fromJson(e as Map<String, dynamic>)).toList();
+        } catch (_) {}
+      }
+    }
+
+    List<String> ots = [];
+    if (json['outlets'] != null) {
+      final val = json['outlets'];
+      if (val is List) {
+        ots = val.map((e) => e.toString()).toList();
+      } else if (val is String) {
+        try {
+          final List parsed = jsonDecode(val);
+          ots = parsed.map((e) => e.toString()).toList();
+        } catch (_) {}
+      }
+    }
+
+    return SurveyRecord(
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      startDate: json['startDate'] as String? ?? json['start_date'] as String? ?? '',
+      endDate: json['endDate'] as String? ?? json['end_date'] as String? ?? '',
+      outlets: ots,
+      questions: qs,
+      status: json['status'] as String? ?? 'aktif',
+      hasCompleted: json['hasCompleted'] as bool? ?? false,
+    );
+  }
+}
+
+class SurveyQuestion {
+  final String id;
+  final String text;
+  final Map<String, String> options;
+
+  SurveyQuestion({
+    required this.id,
+    required this.text,
+    required this.options,
+  });
+
+  factory SurveyQuestion.fromJson(Map<String, dynamic> json) {
+    Map<String, String> opts = {};
+    if (json['options'] != null) {
+      final val = json['options'];
+      if (val is Map) {
+        opts = val.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+    }
+    return SurveyQuestion(
+      id: json['id'] as String? ?? '',
+      text: json['text'] as String? ?? '',
+      options: opts,
+    );
+  }
+}
+
+class SurveyResponseRecord {
+  final String id;
+  final String surveyId;
+  final int employeeId;
+  final String employeeName;
+  final String outlet;
+  final Map<String, String> answers;
+  final String submittedAt;
+
+  SurveyResponseRecord({
+    required this.id,
+    required this.surveyId,
+    required this.employeeId,
+    required this.employeeName,
+    required this.outlet,
+    required this.answers,
+    required this.submittedAt,
+  });
+
+  factory SurveyResponseRecord.fromJson(Map<String, dynamic> json) {
+    Map<String, String> ans = {};
+    if (json['answers'] != null) {
+      final val = json['answers'];
+      if (val is Map) {
+        ans = val.map((k, v) => MapEntry(k.toString(), v.toString()));
+      } else if (val is String) {
+        try {
+          final Map parsed = jsonDecode(val);
+          ans = parsed.map((k, v) => MapEntry(k.toString(), v.toString()));
+        } catch (_) {}
+      }
+    }
+    return SurveyResponseRecord(
+      id: json['id'] as String? ?? '',
+      surveyId: json['surveyId'] as String? ?? json['survey_id'] as String? ?? '',
+      employeeId: (json['employeeId'] as num?)?.toInt() ?? (json['employee_id'] as num?)?.toInt() ?? 0,
+      employeeName: json['employeeName'] as String? ?? json['employee_name'] as String? ?? '',
+      outlet: json['outlet'] as String? ?? '',
+      answers: ans,
+      submittedAt: json['submittedAt'] as String? ?? json['submitted_at'] as String? ?? '',
+    );
+  }
+}
+
 
 
 

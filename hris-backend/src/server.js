@@ -25,6 +25,7 @@ import docRoutes from './routes/docRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import contractRoutes from './routes/contractRoutes.js';
 import informationRoutes from './routes/informationRoutes.js';
+import surveyRoutes from './routes/surveyRoutes.js';
 import { authenticateToken } from './middleware/auth.js';
 
 
@@ -108,6 +109,7 @@ app.use('/api/documentations', docRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/contracts', contractRoutes);
 app.use('/api/informations', informationRoutes);
+app.use('/api/surveys', surveyRoutes);
 app.use('/uploads', express.static(path.resolve('uploads')));
 
 // File-based database for training materials and DISC results

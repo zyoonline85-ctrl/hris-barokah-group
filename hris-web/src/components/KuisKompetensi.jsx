@@ -627,7 +627,7 @@ const KerjakanKuisModal = ({ isOpen, quiz, employee, onClose, onSubmit }) => {
 };
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
-export default function KuisKompetensi() {
+export default function KuisKompetensi({ token, API_URL }) {
   const { activeEmployees, dispatch: hrisDispatch } = useHRIS();
   const [isSendingEvent, setIsSendingEvent] = useState(false);
 
@@ -722,7 +722,7 @@ export default function KuisKompetensi() {
   const [kerjakanEmpId, setKerjakanEmpId] = useState('');
 
   // ── Filter
-  const allOutlets = [...new Set(activeEmployees.map(e => e.outlet).filter(Boolean))].sort();
+  const allOutlets = [...new Set((activeEmployees || []).map(e => e.outlet).filter(Boolean))].sort();
   const [selectedOutlets, setSelectedOutlets] = useState([]);
   const [showOutletDropdown, setShowOutletDropdown] = useState(false);
 
@@ -764,12 +764,12 @@ export default function KuisKompetensi() {
         return [...new Set(roles.map(r => r.jabatan).filter(Boolean))].sort();
       }
     } catch (e) {}
-    return [...new Set(activeEmployees.map(e => e.position).filter(Boolean))].sort();
+    return [...new Set((activeEmployees || []).map(e => e.position).filter(Boolean))].sort();
   })();
 
-  const filteredEmployees = selectedOutlets.length
+  const filteredEmployees = (selectedOutlets.length && activeEmployees)
     ? activeEmployees.filter(e => selectedOutlets.includes(e.outlet))
-    : activeEmployees;
+    : (activeEmployees || []);
 
   // Persist changes
   const saveQuizBank = useCallback((data) => {
@@ -789,17 +789,97 @@ export default function KuisKompetensi() {
     lsSet('hris_notifications', data);
   }, []);
 
-  const saveSurveys = useCallback((data) => {
-    setSurveys(data);
-    lsSet('hris_surveys', data);
-    hrisDispatch({ type: 'SURVEYS_CHANGED' });
-  }, [hrisDispatch]);
+  const fetchSurveys = useCallback(async () => {
+    try {
+      const res = await fetch(`${getApiUrl()}/surveys`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        setSurveys(data.data || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch surveys:', e);
+    }
+  }, [token]);
 
-  const saveSurveyResponses = useCallback((data) => {
-    setSurveyResponses(data);
-    lsSet('hris_survey_responses', data);
-    hrisDispatch({ type: 'SURVEY_RESPONSES_CHANGED' });
-  }, [hrisDispatch]);
+  const fetchSurveyResponses = useCallback(async (surveyId) => {
+    try {
+      const res = await fetch(`${getApiUrl()}/surveys/${surveyId}/responses`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        setSurveyResponses(data.data || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch survey responses:', e);
+    }
+  }, [token]);
+
+  const saveSurveys = useCallback(async (surveyObj) => {
+    try {
+      const res = await fetch(`${getApiUrl()}/surveys`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(surveyObj)
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        fetchSurveys();
+        hrisDispatch({ type: 'SURVEYS_CHANGED' });
+        alert(surveyObj.id && surveys.some(s => s.id === surveyObj.id) ? 'Survey berhasil diperbarui!' : 'Survey baru berhasil dibuat!');
+      } else {
+        alert('Gagal menyimpan survey: ' + data.message);
+      }
+    } catch (e) {
+      console.error('Failed to save survey:', e);
+      alert('Gagal menyimpan survey.');
+    }
+  }, [token, fetchSurveys, hrisDispatch, surveys]);
+
+  const saveSurveyResponses = useCallback(async (newResp) => {
+    try {
+      const res = await fetch(`${getApiUrl()}/surveys/${newResp.surveyId}/responses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(newResp)
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        if (selectedSurveyForResult && selectedSurveyForResult.id === newResp.surveyId) {
+          fetchSurveyResponses(newResp.surveyId);
+        }
+        hrisDispatch({ type: 'SURVEY_RESPONSES_CHANGED' });
+        alert('Jawaban survey berhasil disimpan!');
+      } else {
+        alert('Gagal menyimpan jawaban: ' + data.message);
+      }
+    } catch (e) {
+      console.error('Failed to save survey response:', e);
+      alert('Gagal menyimpan jawaban.');
+    }
+  }, [token, fetchSurveyResponses, selectedSurveyForResult, hrisDispatch]);
+
+  // Fetch surveys on mount & tab select
+  useEffect(() => {
+    if (activeTab === 'survey') {
+      fetchSurveys();
+    }
+  }, [activeTab, fetchSurveys]);
+
+  // Fetch responses when selected survey changes
+  useEffect(() => {
+    if (selectedSurveyForResult) {
+      fetchSurveyResponses(selectedSurveyForResult.id);
+    }
+  }, [selectedSurveyForResult, fetchSurveyResponses]);
 
   // Listen to storage changes from simulator or mobile
   useEffect(() => {
@@ -807,8 +887,8 @@ export default function KuisKompetensi() {
       if (e.detail?.key === 'quiz_results') setQuizResults(lsGet('quiz_results', []));
       if (e.detail?.key === 'hris_notifications') setNotifications(lsGet('hris_notifications', []));
       if (e.detail?.key === 'quiz_bank') setQuizBank(lsGet('quiz_bank', []));
-      if (e.detail?.key === 'hris_surveys') setSurveys(lsGet('hris_surveys', []));
-      if (e.detail?.key === 'hris_survey_responses') setSurveyResponses(lsGet('hris_survey_responses', []));
+      if (e.detail?.key === 'hris_surveys') fetchSurveys();
+      if (e.detail?.key === 'hris_survey_responses' && selectedSurveyForResult) fetchSurveyResponses(selectedSurveyForResult.id);
       if (e.detail?.key === 'quiz_bank_generated') {
         // Merge generated quizzes into main bank
         const gen = lsGet('quiz_bank_generated', []);
@@ -927,14 +1007,9 @@ export default function KuisKompetensi() {
       status: 'aktif',
       created_at: new Date().toISOString()
     };
-    if (editingSurveyId) {
-      saveSurveys(surveys.map(s => s.id === editingSurveyId ? surveyObj : s));
-    } else {
-      saveSurveys([...surveys, surveyObj]);
-    }
+    saveSurveys(surveyObj);
     setShowSurveyAddPreview(false);
     setShowTambahSurveyModal(false);
-    alert(editingSurveyId ? 'Survey berhasil diperbarui!' : 'Survey baru berhasil dibuat!');
   };
 
   // Buka form input jawaban manual
@@ -952,19 +1027,16 @@ export default function KuisKompetensi() {
     if (!survey) return;
     const unanswered = (survey.questions || []).filter((_, i) => !responseFormAnswers[`q${i}`]);
     if (unanswered.length > 0) { alert(`Harap jawab semua ${(survey.questions || []).length} pertanyaan!`); return; }
-    const emp = activeEmployees.find(e => String(e.id) === String(responseFormEmpId));
+    const emp = (activeEmployees || []).find(e => String(e.id) === String(responseFormEmpId));
     const newResp = {
-      id: uid(),
       surveyId: responseTargetSurveyId,
       employeeId: responseFormEmpId,
       employeeName: emp?.full_name || emp?.nama || '',
       outlet: emp?.outlet || '',
-      answers: { ...responseFormAnswers },
-      submittedAt: new Date().toISOString()
+      answers: { ...responseFormAnswers }
     };
-    saveSurveyResponses([...surveyResponses, newResp]);
+    saveSurveyResponses(newResp);
     setShowInputResponseModal(false);
-    alert('Jawaban berhasil disimpan!');
   };
 
   const handleDeleteSurvey = (srvId) => {
@@ -973,13 +1045,26 @@ export default function KuisKompetensi() {
       title: '🗑 Hapus Survey',
       message: 'Apakah Anda yakin ingin menghapus survey ini? Semua respon terkait survey ini juga akan terhapus.',
       danger: true,
-      onConfirm: () => {
-        const updatedSurveys = surveys.filter(s => s.id !== srvId);
-        saveSurveys(updatedSurveys);
-        const updatedResponses = surveyResponses.filter(r => r.survey_id !== srvId);
-        saveSurveyResponses(updatedResponses);
-        setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: null });
-        alert('Survey berhasil dihapus!');
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`${getApiUrl()}/surveys/${srvId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          const data = await res.json();
+          if (data.status === 'success') {
+            fetchSurveys();
+            setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: null });
+            alert('Survey berhasil dihapus!');
+          } else {
+            alert('Gagal menghapus survey: ' + data.message);
+          }
+        } catch (e) {
+          console.error(e);
+          alert('Gagal menghapus survey.');
+        }
       }
     });
   };

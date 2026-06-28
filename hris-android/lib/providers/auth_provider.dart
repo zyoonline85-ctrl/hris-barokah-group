@@ -29,6 +29,8 @@ class AuthProvider extends ChangeNotifier {
   List<ContractRecord> _contracts = [];
   List<QuizRecord> _quizzes = [];
   List<QuizAttemptRecord> _quizAttempts = [];
+  List<SurveyRecord> _surveys = [];
+  List<SurveyResponseRecord> _surveyResponses = [];
 
   void startNotificationTimer() {
     _notificationTimer?.cancel();
@@ -41,6 +43,7 @@ class AuthProvider extends ChangeNotifier {
         fetchPayrollHistory();
         fetchQuizzes();
         fetchQuizAttempts();
+        fetchSurveys();
         fetchTodayAttendance();
         fetchAttendanceHistory();
         fetchInformations();
@@ -85,6 +88,8 @@ class AuthProvider extends ChangeNotifier {
   BreakSchedule? get todayBreakSchedule => _todayBreakSchedule;
   List<QuizRecord> get quizzes => _quizzes;
   List<QuizAttemptRecord> get quizAttempts => _quizAttempts;
+  List<SurveyRecord> get surveys => _surveys;
+  List<SurveyResponseRecord> get surveyResponses => _surveyResponses;
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -990,5 +995,40 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       print('Error saving DISC result locally: $e');
     }
+  }
+
+  Future<void> fetchSurveys() async {
+    if (_token == null) return;
+    try {
+      final res = await ApiClient.get('surveys', token: _token);
+      final data = jsonDecode(res.body);
+      if (res.statusCode == 200 && data['status'] == 'success') {
+        final List list = data['data'] ?? [];
+        _surveys = list.map((x) => SurveyRecord.fromJson(x)).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      print('FetchSurveys Error: $e');
+    }
+  }
+
+  Future<bool> submitSurveyResponse(String surveyId, Map<String, String> answers) async {
+    if (_token == null || _profile == null) return false;
+    try {
+      final res = await ApiClient.post('surveys/$surveyId/responses', {
+        'employeeId': _profile!.employee.id,
+        'employeeName': _profile!.employee.fullName ?? _profile!.employee.nama ?? '',
+        'outlet': _profile!.employee.outlet ?? '',
+        'answers': answers,
+      }, token: _token);
+      final data = jsonDecode(res.body);
+      if ((res.statusCode == 200 || res.statusCode == 201) && data['status'] == 'success') {
+        await fetchSurveys();
+        return true;
+      }
+    } catch (e) {
+      print('SubmitSurveyResponse Error: $e');
+    }
+    return false;
   }
 }
